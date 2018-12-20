@@ -389,6 +389,17 @@ done:
 	return err;
 }
 
+static int spi_sam_transceive_sync(struct device *dev,
+				    const struct spi_config *config,
+				    const struct spi_buf_set *tx_bufs,
+				    const struct spi_buf_set *rx_bufs)
+{
+	struct spi_sam_data *data = dev->driver_data;
+
+	spi_context_lock(&data->ctx, false, NULL);
+	return spi_sam_transceive(dev, config, tx_bufs, rx_bufs);
+}
+
 #ifdef CONFIG_SPI_ASYNC
 static int spi_sam_transceive_async(struct device *dev,
 				     const struct spi_config *config,
@@ -396,7 +407,10 @@ static int spi_sam_transceive_async(struct device *dev,
 				     const struct spi_buf_set *rx_bufs,
 				     struct spi_async_event *async)
 {
-	return -ENOTSUP;
+	struct spi_sam_data *data = dev->driver_data;
+
+	spi_context_lock(&data->ctx, true, async);
+	return spi_sam_transceive(dev, config, tx_bufs, rx_bufs);
 }
 #endif /* CONFIG_SPI_ASYNC */
 
