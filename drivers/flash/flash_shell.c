@@ -36,7 +36,7 @@ static int cmd_erase(const struct shell *shell, size_t argc, char *argv[])
 	int result;
 	u32_t size;
 
-	flash_dev = device_get_binding(FLASH_DEV_NAME);
+	flash_dev = device_get_binding(DT_FLASH_DEV_NAME);
 	if (!flash_dev) {
 		error(shell, "Flash driver was not found!");
 		return -ENODEV;
@@ -52,7 +52,12 @@ static int cmd_erase(const struct shell *shell, size_t argc, char *argv[])
 	if (argc > 2) {
 		size = strtoul(argv[2], NULL, 16);
 	} else {
+#if defined(CONFIG_SOC_FLASH_NRF)
 		size = NRF_FICR->CODEPAGESIZE;
+#else
+		error(shell, "Missing size.");
+		return -EINVAL;
+#endif
 	}
 
 	flash_write_protection_set(flash_dev, 0);
@@ -76,7 +81,7 @@ static int cmd_write(const struct shell *shell, size_t argc, char *argv[])
 	u32_t w_addr;
 	int j = 0;
 
-	flash_dev = device_get_binding(FLASH_DEV_NAME);
+	flash_dev = device_get_binding(DT_FLASH_DEV_NAME);
 	if (!flash_dev) {
 		error(shell, "Flash driver was not found!");
 		return -ENODEV;
@@ -128,7 +133,7 @@ static int cmd_read(const struct shell *shell, size_t argc, char *argv[])
 	u32_t addr;
 	int cnt;
 
-	flash_dev = device_get_binding(FLASH_DEV_NAME);
+	flash_dev = device_get_binding(DT_FLASH_DEV_NAME);
 	if (!flash_dev) {
 		error(shell, "Flash driver was not found!");
 		return -ENODEV;
@@ -168,7 +173,7 @@ static int cmd_test(const struct shell *shell, size_t argc, char *argv[])
 	u32_t addr;
 	u32_t size;
 
-	flash_dev = device_get_binding(FLASH_DEV_NAME);
+	flash_dev = device_get_binding(DT_FLASH_DEV_NAME);
 	if (!flash_dev) {
 		error(shell, "Flash driver was not found!");
 		return -ENODEV;
@@ -216,8 +221,6 @@ static int cmd_test(const struct shell *shell, size_t argc, char *argv[])
 	return 0;
 }
 
-#define HELP_NONE "[none]"
-
 SHELL_CREATE_STATIC_SUBCMD_SET(flash_cmds) {
 	SHELL_CMD(erase, NULL, "<page address> <size>", cmd_erase),
 	SHELL_CMD(read, NULL, "<address> <Dword count>", cmd_read),
@@ -228,22 +231,9 @@ SHELL_CREATE_STATIC_SUBCMD_SET(flash_cmds) {
 
 static int cmd_flash(const struct shell *shell, size_t argc, char **argv)
 {
-	int err;
-
-	if (argc == 1) {
-		shell_help_print(shell, NULL, 0);
-		/* shell_cmd_precheck returns 1 when help is printed */
-		return 1;
-	}
-
-	err = shell_cmd_precheck(shell, (argc == 2), NULL, 0);
-	if (err) {
-		return err;
-	}
-
-	error(shell, "%s:%s%s", argv[0], "unknown parameter: ", argv[1]);
+	error(shell, "%s:unknown parameter: %s", argv[0], argv[1]);
 	return -EINVAL;
 }
 
-SHELL_CMD_REGISTER(flash, &flash_cmds, "Flash shell commands",
-		   cmd_flash);
+SHELL_CMD_ARG_REGISTER(flash, &flash_cmds, "Flash shell commands",
+		       cmd_flash, 2, 0);

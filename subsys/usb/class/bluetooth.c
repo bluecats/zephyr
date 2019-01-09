@@ -21,7 +21,7 @@
 
 #define LOG_LEVEL CONFIG_USB_DEVICE_LOG_LEVEL
 #include <logging/log.h>
-LOG_MODULE_REGISTER(usb_bluetooth)
+LOG_MODULE_REGISTER(usb_bluetooth);
 
 #if !defined(CONFIG_USB_COMPOSITE_DEVICE)
 static u8_t interface_data[64];
@@ -230,6 +230,8 @@ static void bluetooth_status_cb(enum usb_dc_status_code status,
 		break;
 	case USB_DC_RESUME:
 		LOG_DBG("USB device resumed");
+		break;
+	case USB_DC_SOF:
 		break;
 	case USB_DC_UNKNOWN:
 	default:

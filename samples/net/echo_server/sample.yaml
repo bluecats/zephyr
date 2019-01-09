@@ -19,7 +19,8 @@ tests:
   test_mcr20a:
     extra_args: OVERLAY_CONFIG="overlay-frdm_k64f_mcr20a.conf"
     platform_whitelist: frdm_k64f
-  test_nrf:
+  test_nrf_802154:
+    extra_args: OVERLAY_CONFIG="overlay-802154.conf"
     platform_whitelist: nrf52840_pca10056
   test_usbnet:
     harness: net
@@ -37,11 +38,11 @@ tests:
     tags: net usb
   test_nrf_openthread:
     extra_args: OVERLAY_CONFIG="overlay-ot.conf"
+    slow: true
     tags: net openthread
     platform_whitelist: nrf52840_pca10056
-  test_kw41z:
-    platform_whitelist: frdm_kw41z
   test_kw41z_openthread:
     extra_args: OVERLAY_CONFIG="overlay-ot.conf"
+    slow: true
     tags: net openthread
     platform_whitelist: frdm_kw41z

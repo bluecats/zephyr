@@ -24,16 +24,16 @@ void _soc_irq_enable(u32_t irq)
 	struct device *dev_cavs, *dev_ictl;
 
 	switch (XTENSA_IRQ_NUMBER(irq)) {
-	case CAVS_ICTL_0_IRQ:
+	case DT_CAVS_ICTL_0_IRQ:
 		dev_cavs = device_get_binding(CONFIG_CAVS_ICTL_0_NAME);
 		break;
-	case CAVS_ICTL_1_IRQ:
+	case DT_CAVS_ICTL_1_IRQ:
 		dev_cavs = device_get_binding(CONFIG_CAVS_ICTL_1_NAME);
 		break;
-	case CAVS_ICTL_2_IRQ:
+	case DT_CAVS_ICTL_2_IRQ:
 		dev_cavs = device_get_binding(CONFIG_CAVS_ICTL_2_NAME);
 		break;
-	case CAVS_ICTL_3_IRQ:
+	case DT_CAVS_ICTL_3_IRQ:
 		dev_cavs = device_get_binding(CONFIG_CAVS_ICTL_3_NAME);
 		break;
 	default:
@@ -83,16 +83,16 @@ void _soc_irq_disable(u32_t irq)
 	struct device *dev_cavs, *dev_ictl;
 
 	switch (XTENSA_IRQ_NUMBER(irq)) {
-	case CAVS_ICTL_0_IRQ:
+	case DT_CAVS_ICTL_0_IRQ:
 		dev_cavs = device_get_binding(CONFIG_CAVS_ICTL_0_NAME);
 		break;
-	case CAVS_ICTL_1_IRQ:
+	case DT_CAVS_ICTL_1_IRQ:
 		dev_cavs = device_get_binding(CONFIG_CAVS_ICTL_1_NAME);
 		break;
-	case CAVS_ICTL_2_IRQ:
+	case DT_CAVS_ICTL_2_IRQ:
 		dev_cavs = device_get_binding(CONFIG_CAVS_ICTL_2_NAME);
 		break;
-	case CAVS_ICTL_3_IRQ:
+	case DT_CAVS_ICTL_3_IRQ:
 		dev_cavs = device_get_binding(CONFIG_CAVS_ICTL_3_NAME);
 		break;
 	default:
@@ -147,24 +147,6 @@ void _soc_irq_disable(u32_t irq)
 	}
 }
 
-void soc_config_iomux_ctsrts(void)
-{
-	volatile struct soc_io_mux_regs *regs =
-		(volatile struct soc_io_mux_regs *)IOMUX_BASE;
-
-	/* Configure the MUX to select GPIO functionality for GPIO 23 and 24 */
-	regs->io_mux_ctl0 |= SOC_UART_RTS_CTS_MS;
-}
-
-void soc_config_iomux_i2c(void)
-{
-	volatile struct soc_io_mux_regs *regs =
-		(volatile struct soc_io_mux_regs *)IOMUX_BASE;
-
-	/* Configure the MUX to select the correct I2C port (I2C1) */
-	regs->io_mux_ctl2 |= SOC_I2C_I0_I1_MS;
-}
-
 static inline void soc_set_resource_ownership(void)
 {
 	volatile struct soc_resource_alloc_regs *regs =
@@ -204,12 +186,23 @@ u32_t soc_get_ref_clk_freq(void)
 
 static void soc_set_power_and_clock(void)
 {
-	volatile struct soc_dsp_shim_regs *regs =
-		(volatile struct soc_dsp_shim_regs *)
-		SOC_DSP_SHIM_REG_BASE;
+	volatile struct soc_dsp_shim_regs *dsp_shim_regs =
+		(volatile struct soc_dsp_shim_regs *)SOC_DSP_SHIM_REG_BASE;
+#if (CONFIG_AUDIO_INTEL_DMIC)
+	volatile struct soc_dmic_shim_regs *dmic_shim_regs =
+		(volatile struct soc_dmic_shim_regs *)SOC_DMIC_SHIM_REG_BASE;
 
-	regs->clkctl |= SOC_CLKCTL_REQ_FAST_CLK | SOC_CLKCTL_OCS_FAST_CLK;
-	regs->pwrctl |= SOC_PWRCTL_DISABLE_PWR_GATING_DSP1 |
+	/* enable power */
+	dmic_shim_regs->dmiclctl |= SOC_DMIC_SHIM_DMICLCTL_SPA;
+
+	while ((dmic_shim_regs->dmiclctl & SOC_DMIC_SHIM_DMICLCTL_CPA) == 0) {
+		/* wait for power status */
+	}
+#endif
+
+	dsp_shim_regs->clkctl |= SOC_CLKCTL_REQ_FAST_CLK |
+		SOC_CLKCTL_OCS_FAST_CLK;
+	dsp_shim_regs->pwrctl |= SOC_PWRCTL_DISABLE_PWR_GATING_DSP1 |
 		SOC_PWRCTL_DISABLE_PWR_GATING_DSP0;
 }
 
@@ -223,14 +216,14 @@ static void soc_read_bootstraps(void)
 
 	switch (bootstrap) {
 	case SOC_S1000_STRAP_REF_CLK_19P2:
-		ref_clk_freq = 19200000;
+		ref_clk_freq = 19200000U;
 		break;
 	case SOC_S1000_STRAP_REF_CLK_24P576:
-		ref_clk_freq = 24576000;
+		ref_clk_freq = 24576000U;
 		break;
 	case SOC_S1000_STRAP_REF_CLK_38P4:
 	default:
-		ref_clk_freq = 38400000;
+		ref_clk_freq = 38400000U;
 		break;
 	}
 }
@@ -243,14 +236,6 @@ static int soc_init(struct device *dev)
 
 	soc_set_resource_ownership();
 	soc_set_power_and_clock();
-
-#ifdef CONFIG_I2C
-	soc_config_iomux_i2c();
-#endif
-
-#ifdef CONFIG_GPIO
-	soc_config_iomux_ctsrts();
-#endif
 
 	return 0;
 }

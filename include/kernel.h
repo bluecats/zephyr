@@ -96,11 +96,11 @@ typedef struct {
 #endif
 
 #ifdef CONFIG_OBJECT_TRACING
-#define _OBJECT_TRACING_NEXT_PTR(type) struct type *__next
+#define _OBJECT_TRACING_NEXT_PTR(type) struct type *__next;
 #define _OBJECT_TRACING_INIT .__next = NULL,
 #else
 #define _OBJECT_TRACING_INIT
-#define _OBJECT_TRACING_NEXT_PTR(type) u8_t __dummy_next[0]
+#define _OBJECT_TRACING_NEXT_PTR(type)
 #endif
 
 #ifdef CONFIG_POLL
@@ -199,7 +199,7 @@ struct _k_object_assignment {
  * Intended to be called as the last statement in kernel object init
  * functions.
  *
- * @param object Address of the kernel object
+ * @param obj Address of the kernel object
  */
 void _k_object_init(void *obj);
 #else
@@ -724,21 +724,21 @@ extern FUNC_NORETURN void k_thread_user_mode_enter(k_thread_entry_t entry,
 						   void *p3);
 
 /**
- * @brief Grant a thread access to a NULL-terminated  set of kernel objects
+ * @brief Grant a thread access to a set of kernel objects
  *
  * This is a convenience function. For the provided thread, grant access to
  * the remaining arguments, which must be pointers to kernel objects.
- * The final argument must be a NULL.
  *
  * The thread object must be initialized (i.e. running). The objects don't
  * need to be.
+ * Note that NULL shouldn't be passed as an argument.
  *
  * @param thread Thread to grant access to objects
- * @param ... NULL-terminated list of kernel object pointers
+ * @param ... list of kernel object pointers
  * @req K-THREAD-004
  */
-extern void __attribute__((sentinel))
-	k_thread_access_grant(struct k_thread *thread, ...);
+#define k_thread_access_grant(thread, ...) \
+	FOR_EACH_FIXED_ARG(k_object_access_grant, thread, __VA_ARGS__)
 
 /**
  * @brief Assign a resource memory pool to a thread
@@ -800,7 +800,7 @@ __syscall s32_t k_sleep(s32_t duration);
  *
  * @return N/A
  */
-extern void k_busy_wait(u32_t usec_to_wait);
+__syscall void k_busy_wait(u32_t usec_to_wait);
 
 /**
  * @brief Yield the current thread.
@@ -1110,10 +1110,10 @@ extern void k_sched_time_slice_set(s32_t slice, int prio);
  *
  * @note Can be called by ISRs.
  *
- * @return 0 if invoked by a thread.
- * @return Non-zero if invoked by an ISR.
+ * @return false if invoked by a thread.
+ * @return true if invoked by an ISR.
  */
-extern int k_is_in_isr(void);
+extern bool k_is_in_isr(void);
 
 /**
  * @brief Determine if code is running in a preemptible thread.
@@ -1316,10 +1316,10 @@ struct k_timer {
 	_wait_q_t wait_q;
 
 	/* runs in ISR context */
-	void (*expiry_fn)(struct k_timer *);
+	void (*expiry_fn)(struct k_timer *timer);
 
 	/* runs in the context of the thread that calls k_timer_stop() */
-	void (*stop_fn)(struct k_timer *);
+	void (*stop_fn)(struct k_timer *timer);
 
 	/* timer period */
 	s32_t period;
@@ -1330,7 +1330,7 @@ struct k_timer {
 	/* user-specific data, also used to support legacy features */
 	void *user_data;
 
-	_OBJECT_TRACING_NEXT_PTR(k_timer);
+	_OBJECT_TRACING_NEXT_PTR(k_timer)
 };
 
 #define _K_TIMER_INITIALIZER(obj, expiry, stop) \
@@ -1499,11 +1499,11 @@ extern s32_t z_timeout_remaining(struct _timeout *timeout);
  *
  * @return Remaining time (in milliseconds).
  */
-__syscall s32_t k_timer_remaining_get(struct k_timer *timer);
+__syscall u32_t k_timer_remaining_get(struct k_timer *timer);
 
-static inline s32_t _impl_k_timer_remaining_get(struct k_timer *timer)
+static inline u32_t _impl_k_timer_remaining_get(struct k_timer *timer)
 {
-	return __ticks_to_ms(z_timeout_remaining(&timer->timeout));
+	return (u32_t)__ticks_to_ms(z_timeout_remaining(&timer->timeout));
 }
 
 /**
@@ -1670,7 +1670,7 @@ struct k_queue {
 		_POLL_EVENT;
 	};
 
-	_OBJECT_TRACING_NEXT_PTR(k_queue);
+	_OBJECT_TRACING_NEXT_PTR(k_queue)
 };
 
 #define _K_QUEUE_INITIALIZER(obj) \
@@ -2307,7 +2307,7 @@ struct k_stack {
 	_wait_q_t wait_q;
 	u32_t *base, *next, *top;
 
-	_OBJECT_TRACING_NEXT_PTR(k_stack);
+	_OBJECT_TRACING_NEXT_PTR(k_stack)
 	u8_t flags;
 };
 
@@ -2509,9 +2509,7 @@ extern struct k_work_q k_sys_work_q;
  * @req K-WORK-002
  */
 #define K_WORK_DEFINE(work, work_handler) \
-	struct k_work work \
-		__in_section(_k_work, static, work) = \
-		_K_WORK_INITIALIZER(work_handler)
+	struct k_work work = _K_WORK_INITIALIZER(work_handler)
 
 /**
  * @brief Initialize a work item.
@@ -2527,7 +2525,6 @@ extern struct k_work_q k_sys_work_q;
 static inline void k_work_init(struct k_work *work, k_work_handler_t handler)
 {
 	*work = (struct k_work)_K_WORK_INITIALIZER(handler);
-	_k_object_init(work);
 }
 
 /**
@@ -2561,6 +2558,46 @@ static inline void k_work_submit_to_queue(struct k_work_q *work_q,
 }
 
 /**
+ * @brief Submit a work item to a user mode workqueue
+ *
+ * Submits a work item to a workqueue that runs in user mode. A temporary
+ * memory allocation is made from the caller's resource pool which is freed
+ * once the worker thread consumes the k_work item. The workqueue
+ * thread must have memory access to the k_work item being submitted. The caller
+ * must have permission granted on the work_q parameter's queue object.
+ *
+ * Otherwise this works the same as k_work_submit_to_queue().
+ *
+ * @note Can be called by ISRs.
+ *
+ * @param work_q Address of workqueue.
+ * @param work Address of work item.
+ *
+ * @retval -EBUSY if the work item was already in some workqueue
+ * @retval -ENOMEM if no memory for thread resource pool allocation
+ * @retval 0 Success
+ * @req K-WORK-001
+ */
+static inline int k_work_submit_to_user_queue(struct k_work_q *work_q,
+					      struct k_work *work)
+{
+	int ret = -EBUSY;
+
+	if (!atomic_test_and_set_bit(work->flags, K_WORK_STATE_PENDING)) {
+		ret = k_queue_alloc_append(&work_q->queue, work);
+
+		/* Couldn't insert into the queue. Clear the pending bit
+		 * so the work item can be submitted again
+		 */
+		if (ret != 0) {
+			atomic_clear_bit(work->flags, K_WORK_STATE_PENDING);
+		}
+	}
+
+	return ret;
+}
+
+/**
  * @brief Check if a work item is pending.
  *
  * This routine indicates if work item @a work is pending in a workqueue's
@@ -2570,10 +2607,10 @@ static inline void k_work_submit_to_queue(struct k_work_q *work_q,
  *
  * @param work Address of work item.
  *
- * @return 1 if work item is pending, or 0 if it is not pending.
+ * @return true if work item is pending, or false if it is not pending.
  * @req K-WORK-001
  */
-static inline int k_work_pending(struct k_work *work)
+static inline bool k_work_pending(struct k_work *work)
 {
 	return atomic_test_bit(work->flags, K_WORK_STATE_PENDING);
 }
@@ -2598,6 +2635,30 @@ static inline int k_work_pending(struct k_work *work)
 extern void k_work_q_start(struct k_work_q *work_q,
 			   k_thread_stack_t *stack,
 			   size_t stack_size, int prio);
+
+/**
+ * @brief Start a workqueue in user mode
+ *
+ * This works identically to k_work_q_start() except it is callable from user
+ * mode, and the worker thread created will run in user mode.
+ * The caller must have permissions granted on both the work_q parameter's
+ * thread and queue objects, and the same restrictions on priority apply as
+ * k_thread_create().
+ *
+ * @param work_q Address of workqueue.
+ * @param stack Pointer to work queue thread's stack space, as defined by
+ *		K_THREAD_STACK_DEFINE()
+ * @param stack_size Size of the work queue thread's stack (in bytes), which
+ *		should either be the same constant passed to
+ *		K_THREAD_STACK_DEFINE() or the value of K_THREAD_STACK_SIZEOF().
+ * @param prio Priority of the work queue's thread.
+ *
+ * @return N/A
+ * @req K-WORK-001
+ */
+extern void k_work_q_user_start(struct k_work_q *work_q,
+				k_thread_stack_t *stack,
+				size_t stack_size, int prio);
 
 /**
  * @brief Initialize a delayed work item.
@@ -2769,7 +2830,7 @@ struct k_mutex {
 	u32_t lock_count;
 	int owner_orig_prio;
 
-	_OBJECT_TRACING_NEXT_PTR(k_mutex);
+	_OBJECT_TRACING_NEXT_PTR(k_mutex)
 };
 
 /**
@@ -2871,7 +2932,7 @@ struct k_sem {
 	u32_t limit;
 	_POLL_EVENT;
 
-	_OBJECT_TRACING_NEXT_PTR(k_sem);
+	_OBJECT_TRACING_NEXT_PTR(k_sem)
 };
 
 #define _K_SEM_INITIALIZER(obj, initial_count, count_limit) \
@@ -3045,7 +3106,7 @@ struct k_alert {
 	struct k_work work_item;
 	struct k_sem sem;
 
-	_OBJECT_TRACING_NEXT_PTR(k_alert);
+	_OBJECT_TRACING_NEXT_PTR(k_alert)
 };
 
 /**
@@ -3173,7 +3234,7 @@ struct k_msgq {
 	char *write_ptr;
 	u32_t used_msgs;
 
-	_OBJECT_TRACING_NEXT_PTR(k_msgq);
+	_OBJECT_TRACING_NEXT_PTR(k_msgq)
 	u8_t flags;
 };
 /**
@@ -3328,6 +3389,23 @@ __syscall int k_msgq_put(struct k_msgq *q, void *data, s32_t timeout);
 __syscall int k_msgq_get(struct k_msgq *q, void *data, s32_t timeout);
 
 /**
+ * @brief Peek/read a message from a message queue.
+ *
+ * This routine reads a message from message queue @a q in a "first in,
+ * first out" manner and leaves the message in the queue.
+ *
+ * @note Can be called by ISRs.
+ *
+ * @param q Address of the message queue.
+ * @param data Address of area to hold the message read from the queue.
+ *
+ * @retval 0 Message read.
+ * @retval -ENOMSG Returned when the queue has no message.
+ * @req K-MSGQ-002
+ */
+__syscall int k_msgq_peek(struct k_msgq *q, void *data);
+
+/**
  * @brief Purge a message queue.
  *
  * This routine discards all unreceived messages in a message queue's ring
@@ -3451,7 +3529,7 @@ struct k_mbox {
 	_wait_q_t tx_msg_queue;
 	_wait_q_t rx_msg_queue;
 
-	_OBJECT_TRACING_NEXT_PTR(k_mbox);
+	_OBJECT_TRACING_NEXT_PTR(k_mbox)
 };
 /**
  * @cond INTERNAL_HIDDEN
@@ -3635,7 +3713,7 @@ struct k_pipe {
 		_wait_q_t      writers; /**< Writer wait queue */
 	} wait_q;
 
-	_OBJECT_TRACING_NEXT_PTR(k_pipe);
+	_OBJECT_TRACING_NEXT_PTR(k_pipe)
 	u8_t	       flags;		/**< Flags */
 };
 
@@ -3809,7 +3887,7 @@ struct k_mem_slab {
 	char *free_list;
 	u32_t num_used;
 
-	_OBJECT_TRACING_NEXT_PTR(k_mem_slab);
+	_OBJECT_TRACING_NEXT_PTR(k_mem_slab)
 };
 
 #define _K_MEM_SLAB_INITIALIZER(obj, slab_buffer, slab_block_size, \
@@ -4133,7 +4211,7 @@ extern void *k_calloc(size_t nmemb, size_t size);
 /* private - implementation data created as needed, per-type */
 struct _poller {
 	struct k_thread *thread;
-	volatile int is_polling;
+	volatile bool is_polling;
 };
 
 /* private - types bit positions */
@@ -4530,7 +4608,7 @@ extern void _init_static_threads(void);
 /**
  * @internal
  */
-extern int _is_thread_essential(void);
+extern bool _is_thread_essential(void);
 /**
  * @internal
  */
@@ -4682,18 +4760,6 @@ static inline char *K_THREAD_STACK_BUFFER(k_thread_stack_t *sym)
  */
 
 /**
- * @def MEM_PARTITION_ENTRY
- * @brief Used to declare a memory partition entry
- * @req K-MP-001
- */
-#define MEM_PARTITION_ENTRY(_start, _size, _attr) \
-	{\
-		.start = _start, \
-		.size = _size, \
-		.attr = _attr, \
-	}
-
-/**
  * @def K_MEM_PARTITION_DEFINE
  * @brief Used to declare a memory partition
  * @req K-MP-001
@@ -4702,11 +4768,11 @@ static inline char *K_THREAD_STACK_BUFFER(k_thread_stack_t *sym)
 #define K_MEM_PARTITION_DEFINE(name, start, size, attr) \
 	_ARCH_MEM_PARTITION_ALIGN_CHECK(start, size); \
 	__kernel struct k_mem_partition name =\
-		MEM_PARTITION_ENTRY((u32_t)start, size, attr)
+		{ (u32_t)start, size, attr}
 #else
 #define K_MEM_PARTITION_DEFINE(name, start, size, attr) \
 	__kernel struct k_mem_partition name =\
-		MEM_PARTITION_ENTRY((u32_t)start, size, attr)
+		{ (u32_t)start, size, attr}
 #endif /* _ARCH_MEM_PARTITION_ALIGN_CHECK */
 
 /* memory partition */
@@ -4715,10 +4781,10 @@ struct k_mem_partition {
 	u32_t start;
 	/* size of memory partition */
 	u32_t size;
-#ifdef CONFIG_USERSPACE
+#if defined(CONFIG_MEMORY_PROTECTION)
 	/* attribute of memory partition */
 	k_mem_partition_attr_t attr;
-#endif	/* CONFIG_USERSPACE */
+#endif /* CONFIG_MEMORY_PROTECTION */
 };
 
 /* memory domain
@@ -4841,7 +4907,7 @@ __syscall void k_str_out(char *c, size_t n);
  * @param arg Untyped argument to be passed to "fn"
  */
 extern void _arch_start_cpu(int cpu_num, k_thread_stack_t *stack, int sz,
-			    void (*fn)(int, void *), void *arg);
+			    void (*fn)(int key, void *data), void *arg);
 
 #ifdef __cplusplus
 }

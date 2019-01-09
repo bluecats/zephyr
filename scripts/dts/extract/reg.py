@@ -20,12 +20,11 @@ class DTReg(DTDirective):
     #
     # @param node_address Address of node owning the
     #                     reg definition.
-    # @param yaml YAML definition for the owning node.
     # @param names (unused)
     # @param def_label Define label string of node owning the
     #                  compatible definition.
     #
-    def extract(self, node_address, yaml, names, def_label, div):
+    def extract(self, node_address, names, def_label, div):
 
         node = reduced[node_address]
         node_compat = get_compat(node_address)
@@ -88,12 +87,20 @@ class DTReg(DTDirective):
 
             # generate defs for node aliases
             if node_address in aliases:
-                for i in aliases[node_address]:
-                    alias_label = convert_string_to_label(i)
-                    alias_addr = [alias_label] + l_addr + l_idx
-                    alias_size = [alias_label] + l_size + l_idx
-                    prop_alias['_'.join(alias_addr)] = '_'.join(l_base + l_addr + l_idx)
-                    prop_alias['_'.join(alias_size)] = '_'.join(l_base + l_size + l_idx)
+                add_prop_aliases(
+                    node_address,
+                    lambda alias:
+                        '_'.join([convert_string_to_label(alias)] +
+                                 l_addr + l_idx),
+                    l_addr_fqn,
+                    prop_alias)
+                add_prop_aliases(
+                    node_address,
+                    lambda alias:
+                        '_'.join([convert_string_to_label(alias)] +
+                                 l_size + l_idx),
+                    l_size_fqn,
+                    prop_alias)
 
             insert_defs(node_address, prop_def, prop_alias)
 

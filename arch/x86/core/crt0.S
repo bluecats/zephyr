@@ -24,7 +24,7 @@
 
 	GDATA(_idt_base_address)
 	GDATA(_interrupt_stack)
-	GDATA(_Idt)
+	GDATA(z_x86_idt)
 #ifndef CONFIG_GDT_DYNAMIC
 	GDATA(_gdt)
 #endif
@@ -39,7 +39,7 @@
 #endif
 
 #ifdef CONFIG_SYS_POWER_DEEP_SLEEP
-	GTEXT(_sys_soc_resume_from_deep_sleep)
+	GTEXT(sys_resume_from_deep_sleep)
 #endif
 
 #ifdef CONFIG_REALMODE
@@ -173,7 +173,6 @@ SECTION_FUNC(TEXT_START, __start)
 #if CONFIG_SET_GDT
 	lgdt	_gdt_rom		/* load 32-bit operand size GDT */
 #endif
-	lidt	_Idt		/* load 32-bit operand size IDT */
 
 
 
@@ -256,13 +255,13 @@ __csSet:
 	 * the ISR stack size are some multiple of STACK_ALIGN, which
 	 * is at least 4.
 	 *
-	 * This is also used to call the _sys_soc_resume_from_deep_sleep()
+	 * This is also used to call the sys_resume_from_deep_sleep()
 	 * routine to avoid memory corruption if the system is resuming from
-	 * deep sleep. It is important that _sys_soc_resume_from_deep_sleep()
+	 * deep sleep. It is important that sys_resume_from_deep_sleep()
 	 * restores the stack pointer to what it was at deep sleep before
          * enabling interrupts.  This is necessary to avoid
 	 * interfering with interrupt handler use of this stack.
-	 * If it is a cold boot then _sys_soc_resume_from_deep_sleep() should
+	 * If it is a cold boot then sys_resume_from_deep_sleep() should
 	 * not do anything and must return immediately.
 	 */
 #ifdef CONFIG_INIT_STACKS
@@ -288,7 +287,7 @@ __csSet:
 #if defined(CONFIG_SYS_POWER_DEEP_SLEEP) && \
              !defined(CONFIG_BOOTLOADER_CONTEXT_RESTORE)
 	/*
-	 * Invoke _sys_soc_resume_from_deep_sleep() hook to handle resume from
+	 * Invoke sys_resume_from_deep_sleep() hook to handle resume from
 	 * deep sleep. It should first check whether system is recovering from
 	 * deep sleep state. If it is, then this function should restore
 	 * states and resume at the point system went to deep sleep.
@@ -299,7 +298,7 @@ __csSet:
 	 * return and execution falls through to cold boot path.
 	 */
 
-	call _sys_soc_resume_from_deep_sleep
+	call sys_resume_from_deep_sleep
 
 #endif
 
@@ -379,6 +378,8 @@ __csSet:
 	mov $MAIN_TSS, %ax
 	ltr %ax
 #endif
+	lidt	z_x86_idt		/* load 32-bit operand size IDT */
+
 	/* Jump to C portion of kernel initialization and never return */
 
 	jmp	_Cstart
@@ -458,7 +459,7 @@ _sse_mxcsr_default_value:
 
 	 /* Interrupt Descriptor Table (IDT) definition */
 
-_Idt:
+z_x86_idt:
 	.word	(CONFIG_IDT_NUM_VECTORS * 8) - 1 /* limit: size of IDT-1 */
 
 	/*

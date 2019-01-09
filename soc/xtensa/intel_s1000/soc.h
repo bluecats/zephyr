@@ -32,16 +32,11 @@
 #define IOAPIC_HIGH				0
 
 /* DW interrupt controller */
-#define DW_ICTL_IRQ_CAVS_OFFSET			CAVS_IRQ_NUMBER(DW_ICTL_IRQ)
+#define DW_ICTL_IRQ_CAVS_OFFSET			CAVS_IRQ_NUMBER(DT_DW_ICTL_IRQ)
 #define DW_ICTL_NUM_IRQS			9
 
 /* GPIO */
-#define GPIO_DW_0_BASE_ADDR			0x00080C00
-#define GPIO_DW_0_BITS				32
 #define GPIO_DW_PORT_0_INT_MASK			0
-#define GPIO_DW_0_IRQ_FLAGS			0
-#define GPIO_DW_0_IRQ				0x00040706
-#define GPIO_DW_0_IRQ_ICTL_OFFSET		INTR_CNTL_IRQ_NUM(GPIO_DW_0_IRQ)
 
 /* low power DMACs */
 #define LP_GP_DMA_SIZE				0x00001000
@@ -97,17 +92,6 @@
 #define SOC_NUM_LPGPDMAC			3
 #define SOC_NUM_CHANNELS_IN_DMAC		8
 
-#define IOMUX_BASE				0x00081C00
-#define SOC_I2C_I0_I1_MS			BIT(0)
-#define SOC_UART_RTS_CTS_MS			BIT(16)
-
-struct soc_io_mux_regs {
-	u32_t	reserved[12];
-	u32_t	io_mux_ctl0;
-	u32_t	io_mux_ctl1;
-	u32_t	io_mux_ctl2;
-};
-
 /* SOC Resource Allocation Registers */
 #define SOC_RESOURCE_ALLOC_REG_BASE		0x00071A60
 /* bit field definition for LP GPDMA ownership register */
@@ -131,6 +115,16 @@ struct soc_resource_alloc_regs {
 	};
 	u32_t	dspiopo;
 	u32_t	geno;
+};
+
+/* DMIC SHIM Registers */
+#define SOC_DMIC_SHIM_REG_BASE			0x00071E80
+#define SOC_DMIC_SHIM_DMICLCTL_SPA		BIT(0)
+#define SOC_DMIC_SHIM_DMICLCTL_CPA		BIT(8)
+
+struct soc_dmic_shim_regs {
+	u32_t	dmiclcap;
+	u32_t	dmiclctl;
 };
 
 /* SOC DSP SHIM Registers */

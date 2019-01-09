@@ -30,14 +30,17 @@
 			#size-cells = <1>;
 
 			itcm0: itcm@0 {
+				compatible = "nxp,imx-itcm";
 				reg = <0x00000000 0x20000>;
 			};
 
 			dtcm0: dtcm@20000000 {
+				compatible = "nxp,imx-dtcm";
 				reg = <0x20000000 0x20000>;
 			};
 
 			ocram0: ocram@20200000 {
+				compatible = "mmio-sram";
 				reg = <0x20200000 0x40000>;
 			};
 		};
@@ -233,6 +236,22 @@
 			clocks = <&ccm IMX_CCM_LPUART_CLK 0x80 14>;
 			label = "UART_8";
 			status = "disabled";
+		};
+
+		eth: ethernet@402d8000 {
+			compatible = "nxp,kinetis-ethernet";
+			reg = <0x402D8000 0x628>;
+			interrupts = <114 0>;
+			interrupts-names = "COMMON";
+			status = "disabled";
+			local-mac-address = [00 00 00 00 00 00];
+			label = "ETH_0";
+			ptp {
+				compatible = "nxp,kinetis-ptp";
+				status = "disabled";
+				interrupts = <115 0>;
+				interrupts-names = "IEEE1588_TMR";
+			};
 		};
 	};
 };

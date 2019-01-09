@@ -34,6 +34,14 @@ const clock_usb_pll_config_t usb1PllConfig = {
 };
 #endif
 
+#ifdef CONFIG_ETH_MCUX_0
+const clock_enet_pll_config_t ethPllConfig = {
+	.enableClkOutput = true,
+	.enableClkOutput25M = false,
+	.loopDivider = 1,
+};
+#endif
+
 /**
  *
  * @brief Initialize the system clock
@@ -72,6 +80,9 @@ static ALWAYS_INLINE void clkInit(void)
 #endif
 #ifdef CONFIG_INIT_USB1_PLL
 	CLOCK_InitUsb1Pll(&usb1PllConfig); /* Configure USB1 PLL to 480M */
+#endif
+#ifdef CONFIG_ETH_MCUX_0
+	CLOCK_InitEnetPll(&ethPllConfig);
 #endif
 
 	CLOCK_SetDiv(kCLOCK_ArmDiv, CONFIG_ARM_DIV); /* Set ARM PODF */
@@ -122,11 +133,11 @@ static int imxrt_init(struct device *arg)
 	oldLevel = irq_lock();
 
 	/* Watchdog disable */
-	if (WDOG1->WCR & WDOG_WCR_WDE_MASK) {
+	if ((WDOG1->WCR & WDOG_WCR_WDE_MASK) != 0) {
 		WDOG1->WCR &= ~WDOG_WCR_WDE_MASK;
 	}
 
-	if (WDOG2->WCR & WDOG_WCR_WDE_MASK) {
+	if ((WDOG2->WCR & WDOG_WCR_WDE_MASK) != 0) {
 		WDOG2->WCR &= ~WDOG_WCR_WDE_MASK;
 	}
 
@@ -136,12 +147,12 @@ static int imxrt_init(struct device *arg)
 		| RTWDOG_CS_UPDATE_MASK;
 
 	/* Disable Systick which might be enabled by bootrom */
-	if (SysTick->CTRL & SysTick_CTRL_ENABLE_Msk) {
+	if ((SysTick->CTRL & SysTick_CTRL_ENABLE_Msk) != 0) {
 		SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
 	}
 
 	SCB_EnableICache();
-	if (!(SCB->CCR & SCB_CCR_DC_Msk)) {
+	if ((SCB->CCR & SCB_CCR_DC_Msk) == 0) {
 		SCB_EnableDCache();
 	}
 

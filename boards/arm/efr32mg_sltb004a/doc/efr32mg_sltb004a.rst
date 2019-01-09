@@ -38,7 +38,7 @@ Hardware
   network debugging
 - Breakout pads for GPIO access and connection to external hardware
 - Reset button
-- Automatic switchover between USB and battery power
+- Automatic switch-over between USB and battery power
 - CR2032 coin cell holder and external battery connector
 
 For more information about the EFR32MG SoC and Thunderboard Sense 2
@@ -62,6 +62,8 @@ The efr32mg_sltb004a board configuration supports the following hardware feature
 | NVIC      | on-chip    | nested vector interrupt controller  |
 +-----------+------------+-------------------------------------+
 | SYSTICK   | on-chip    | systick                             |
++-----------+------------+-------------------------------------+
+| FLASH     | on-chip    | flash memory                        |
 +-----------+------------+-------------------------------------+
 | GPIO      | on-chip    | gpio                                |
 +-----------+------------+-------------------------------------+

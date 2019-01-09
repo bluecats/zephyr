@@ -13,6 +13,7 @@ set(GENERATED_DTS_BOARD_CONF ${PROJECT_BINARY_DIR}/include/generated/generated_d
 set_ifndef(DTS_SOURCE ${BOARD_DIR}/${BOARD}.dts)
 set_ifndef(DTS_COMMON_OVERLAYS ${ZEPHYR_BASE}/dts/common/common.dts)
 set_ifndef(DTS_APP_BINDINGS ${APPLICATION_SOURCE_DIR}/dts/bindings)
+set_ifndef(DTS_APP_INCLUDE ${APPLICATION_SOURCE_DIR}/dts)
 
 set(dts_files
   ${DTS_SOURCE}
@@ -35,27 +36,25 @@ foreach(board_root ${BOARD_ROOT})
   # we construct a list of shield names by extracting file name and
   # removing the extension.
   foreach(shield_path ${shields_refs_list})
-	get_filename_component(shield ${shield_path} NAME_WE)
+    get_filename_component(shield ${shield_path} NAME_WE)
 
-	# Generate CONFIG flags matching each shield
-	string(TOUPPER "CONFIG_SHIELD_${shield}" shield_config)
+    # Generate CONFIG flags matching each shield
+    string(TOUPPER "CONFIG_SHIELD_${shield}" shield_config)
 
-	if(${shield_config})
+    if(${shield_config})
       # if shield config flag is on, add shield overlay to the shield overlays
       # list and dts_fixup file to the shield fixup file
       list(APPEND
-		dts_files
-		${shield_dir}/${shield_path}
-		)
+        dts_files
+        ${shield_dir}/${shield_path}
+      )
       list(APPEND
-		dts_fixups
-		${shield_dir}/${shield}/dts_fixup.h
-		)
-	endif()
+        dts_fixups
+        ${shield_dir}/${shield}/dts_fixup.h
+      )
+    endif()
   endforeach()
 endforeach()
-
-message(STATUS "Generating zephyr/include/generated/generated_dts_board.h")
 
 if(CONFIG_HAS_DTS)
 
@@ -68,10 +67,19 @@ if(CONFIG_HAS_DTS)
       )
   endif()
 
+  set(i 0)
   unset(DTC_INCLUDE_FLAG_FOR_DTS)
   foreach(dts_file ${dts_files})
     list(APPEND DTC_INCLUDE_FLAG_FOR_DTS
          -include ${dts_file})
+
+    if(i EQUAL 0)
+      message(STATUS "Loading ${dts_file} as base")
+    else()
+      message(STATUS "Overlaying ${dts_file}")
+    endif()
+
+    math(EXPR i "${i}+1")
   endforeach()
 
   # TODO: Cut down on CMake configuration time by avoiding
@@ -87,6 +95,7 @@ if(CONFIG_HAS_DTS)
     COMMAND ${CMAKE_C_COMPILER}
     -x assembler-with-cpp
     -nostdinc
+    -isystem ${DTS_APP_INCLUDE}
     -isystem ${ZEPHYR_BASE}/include
     -isystem ${ZEPHYR_BASE}/dts/${ARCH}
     -isystem ${ZEPHYR_BASE}/dts
@@ -124,23 +133,23 @@ if(CONFIG_HAS_DTS)
   # Error-out when the deprecated naming convention is found (until
   # after 1.14.0 has been released)
   foreach(path
-	  ${BOARD_DIR}/dts.fixup
-	  ${PROJECT_SOURCE_DIR}/soc/${ARCH}/${SOC_PATH}/dts.fixup
+    ${BOARD_DIR}/dts.fixup
+    ${PROJECT_SOURCE_DIR}/soc/${ARCH}/${SOC_PATH}/dts.fixup
       ${APPLICATION_SOURCE_DIR}/dts.fixup
-	  )
-	if(EXISTS ${path})
-	  message(FATAL_ERROR
-		"A deprecated filename has been detected. Porting is required."
-		"The file '${path}' exists, but it should be named dts_fixup.h instead."
-		"See https://github.com/zephyrproject-rtos/zephyr/pull/10352 for more details"
-		)
-	endif()
+    )
+    if(EXISTS ${path})
+      message(FATAL_ERROR
+      "A deprecated filename has been detected. Porting is required."
+      "The file '${path}' exists, but it should be named dts_fixup.h instead."
+      "See https://github.com/zephyrproject-rtos/zephyr/pull/10352 for more details"
+      )
+    endif()
   endforeach()
 
   # Run extract_dts_includes.py for the header file
   # generated_dts_board.h
   set_ifndef(DTS_BOARD_FIXUP_FILE ${BOARD_DIR}/dts_fixup.h)
-  set_ifndef(DTS_SOC_FIXUP_FILE   ${PROJECT_SOURCE_DIR}/soc/${ARCH}/${SOC_PATH}/dts_fixup.h)
+  set_ifndef(DTS_SOC_FIXUP_FILE   ${SOC_DIR}/${ARCH}/${SOC_PATH}/dts_fixup.h)
 
   list(APPEND dts_fixups
     ${DTS_BOARD_FIXUP_FILE}
@@ -170,6 +179,7 @@ if(CONFIG_HAS_DTS)
     ${DTS_FIXUPS_WITH_FLAG}
     --keyvalue ${GENERATED_DTS_BOARD_CONF}
     --include ${GENERATED_DTS_BOARD_H}
+    --old-alias-names
     )
 
   # Run extract_dts_includes.py to create a .conf and a header file that can be
@@ -183,7 +193,8 @@ if(CONFIG_HAS_DTS)
     message(FATAL_ERROR "command failed with return code: ${ret}")
   endif()
 
-  import_kconfig(${GENERATED_DTS_BOARD_CONF})
+  import_kconfig(CONFIG_ ${GENERATED_DTS_BOARD_CONF})
+  import_kconfig(DT_     ${GENERATED_DTS_BOARD_CONF})
 
 else()
   file(WRITE ${GENERATED_DTS_BOARD_H} "/* WARNING. THIS FILE IS AUTO-GENERATED. DO NOT MODIFY! */")

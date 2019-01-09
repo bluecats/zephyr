@@ -45,6 +45,7 @@ extensions = [
     'sphinx.ext.extlinks',
     'sphinx.ext.autodoc',
     'zephyr.application',
+    'only.eager_only'
 ]
 
 # Only use SVG converter when it is really needed, e.g. LaTeX.
@@ -67,8 +68,8 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Zephyr Project'
-copyright = u'2015-2018 Zephyr Project members and individual contributors'
-author = u'many'
+copyright = u'2015-2019 Zephyr Project members and individual contributors'
+author = u'The Zephyr Project'
 
 # The following code tries to extract the information by reading the Makefile,
 # when Sphinx is run directly (e.g. by Read the Docs).

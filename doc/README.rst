@@ -1,7 +1,7 @@
 .. _zephyr_doc:
 
-Zephyr Documentation Generation
-###############################
+Documentation Generation
+########################
 
 These instructions will walk you through generating the Zephyr Project's
 documentation on your local system using the same documentation sources
@@ -53,7 +53,7 @@ Our documentation processing has been tested to run with:
 * docutils version 0.14
 * sphinx_rtd_theme version 0.4.0
 * sphinxcontrib-svg2pdfconverter version 0.1.0
-* Latexmk version version 4.56
+* Latexmk version 4.56
 
 In order to install the documentation tools, first install Zephyr as
 described in :ref:`getting_started`. Then install additional tools

@@ -13,5 +13,7 @@ config SOC_SERIES_EFR32FG1P
 	select SOC_FAMILY_EXX32
 	select SYS_POWER_LOW_POWER_STATE_SUPPORTED
 	select CPU_HAS_SYSTICK
+	select SOC_GECKO_CMU
+	select SOC_GECKO_GPIO
 	help
 	  Enable support for EFR32 FlexGecko MCU series

@@ -1,7 +1,7 @@
 .. _application:
 
-Application Development Primer
-##############################
+Application Development
+#######################
 
 .. note::
 
@@ -117,7 +117,7 @@ Follow these steps to create a new application directory. (Refer to
    .. code-block:: cmake
 
       # Boilerplate code, which pulls in the Zephyr build system.
-      cmake_minimum_required(VERSION 3.8.2)
+      cmake_minimum_required(VERSION 3.13.1)
       include($ENV{ZEPHYR_BASE}/cmake/app/boilerplate.cmake NO_POLICY_SCOPE)
       project(my_zephyr_app)
 
@@ -267,6 +267,12 @@ described above.)
 
 * :file:`.config`, which contains the configuration settings
   used to build the application.
+
+  .. note::
+
+     The previous version of :file:`.config` is saved to :file:`.config.old`
+     whenever the configuration is updated. This is for convenience, as
+     comparing the old and new versions can be handy.
 
 * Various object files (:file:`.o` files and :file:`.a` files) containing
   compiled kernel and application code.
@@ -930,6 +936,19 @@ Below is a simple example :file:`CMakeList.txt`:
 
    target_sources(app PRIVATE src/main.c)
 
+The Cmake property ``HEX_FILES_TO_MERGE``
+leverages the application configuration provided by
+Kconfig and CMake to let you merge externally built hex files
+with the hex file generated when building the Zephyr application.
+For example:
+
+.. code-block:: cmake
+
+  set_property(GLOBAL APPEND PROPERTY HEX_FILES_TO_MERGE
+      ${app_bootloader_hex}
+      ${PROJECT_BINARY_DIR}/${KERNEL_HEX_NAME}
+      ${app_provision_hex})
+
 CMakeCache.txt
 ==============
 
@@ -997,6 +1016,8 @@ development, as described below in :ref:`override_kernel_conf`.
 
 For more information on Zephyr's Kconfig configuration scheme, see the
 :ref:`setting_configuration_values` section in the :ref:`board_porting_guide`.
+For some tips and general recommendations when writing Kconfig files, see the
+:ref:`kconfig_tips_and_tricks` page.
 
 For information on available kernel configuration options, including
 inter-dependencies between options, see the :ref:`configuration`.
@@ -1022,18 +1043,26 @@ This section describes how to edit Zephyr configuration
 
 - Add each configuration entry on a new line.
 
-- Enable a boolean option by setting its value to ``y``:
+- Enable or disable a boolean option by setting its value to ``y`` or ``n``:
 
   .. code-block:: none
 
      CONFIG_SOME_BOOL=y
+     CONFIG_SOME_OTHER_BOOL=n
 
-  To ensure that a boolean configuration option is not set, add a line
-  like this instead (including the leading ``#`` symbol):
+  .. note::
 
-  .. code-block:: none
+     Another way to set a boolean symbol to ``n`` is with a comment with the
+     following format:
 
-     # CONFIG_SOME_BOOL is not set
+     .. code-block:: none
+
+        # CONFIG_SOME_OTHER_BOOL is not set
+
+     This style is accepted for a technical reason: Kconfig configuration files
+     can be parsed as makefiles (though Zephyr doesn't use this). Having
+     ``n``-valued symbols correspond to unset variables simplifies tests in
+     Make.
 
 - You can set integer and string options as well, like this:
 
@@ -1185,7 +1214,11 @@ As described in :ref:`device-tree`, Zephyr uses Device Tree to
 describe the hardware it runs on. This section describes how you can
 modify an application build's device tree using overlay files. For additional
 information regarding the relationship between Device Tree and Kconfig see
-:ref:`dt_vs_kconfig`.
+:ref:`dt_vs_kconfig`. In some cases the information contained in Device Tree
+files is closely connected to the software and might need to be modified
+using the overlay file concept. This can be relevant for many of the different
+Device Tree nodes, but is particularly useful for :ref:`certain types
+of nodes <dt-alias-chosen>`.
 
 Overlay files, which customarily have the :file:`.overlay` extension,
 contain device tree fragments which add to or modify the device tree
@@ -1282,3 +1315,4 @@ project that demonstrates some of these features.
 .. _Eclipse IDE for C/C++ Developers: https://www.eclipse.org/downloads/packages/eclipse-ide-cc-developers/oxygen2
 .. _GNU MCU Eclipse plug-ins: https://gnu-mcu-eclipse.github.io/plugins/install/
 .. _pyOCD v0.11.0: https://github.com/mbedmicro/pyOCD/releases/tag/v0.11.0
+

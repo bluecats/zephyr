@@ -2,6 +2,7 @@
  * Human Interface Device (HID) USB class core header
  *
  * Copyright (c) 2018 Intel Corporation
+ * Copyright (c) 2018 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -40,6 +41,11 @@ struct usb_hid_descriptor {
 	struct usb_hid_class_subdescriptor subdesc[1];
 } __packed;
 
+/* HID Class Descriptor Types */
+
+#define HID_CLASS_DESCRIPTOR_HID	(REQTYPE_TYPE_CLASS << 5 | 0x01)
+#define HID_CLASS_DESCRIPTOR_REPORT	(REQTYPE_TYPE_CLASS << 5 | 0x02)
+
 /* HID Class Specific Requests */
 
 #define HID_GET_REPORT		0x01
@@ -54,6 +60,8 @@ struct usb_hid_descriptor {
 typedef int (*hid_cb_t)(struct usb_setup_packet *setup, s32_t *len,
 			u8_t **data);
 typedef void (*hid_int_ready_callback)(void);
+typedef void (*hid_protocol_cb_t)(u8_t protocol);
+typedef void (*hid_idle_cb_t)(u16_t report_id);
 
 struct hid_ops {
 	hid_cb_t get_report;
@@ -62,6 +70,8 @@ struct hid_ops {
 	hid_cb_t set_report;
 	hid_cb_t set_idle;
 	hid_cb_t set_protocol;
+	hid_protocol_cb_t protocol_change;
+	hid_idle_cb_t on_idle;
 	/*
 	 * int_in_ready is an optional callback that is called when
 	 * the current interrupt IN transfer has completed.  This can
@@ -153,6 +163,10 @@ struct hid_ops {
 /* Collection types */
 #define COLLECTION_PHYSICAL		0x00
 #define COLLECTION_APPLICATION		0x01
+
+/* Protocols */
+#define HID_PROTOCOL_BOOT		0x00
+#define HID_PROTOCOL_REPORT		0x01
 
 /* Register HID device */
 void usb_hid_register_device(const u8_t *desc, size_t size,

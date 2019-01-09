@@ -117,7 +117,7 @@ static struct device *counter_dev;
 
 static void setup_counter(void)
 {
-	volatile u32_t delay = 0;
+	volatile u32_t delay = 0U;
 
 	counter_dev = device_get_binding("AON_TIMER");
 
@@ -130,7 +130,7 @@ static void setup_counter(void)
 	 * the system clock which is 32MHz) so we need to spin for a few cycles
 	 * to allow the register change to propagate.
 	 */
-	for (delay = 5000; delay--;) {
+	for (delay = 5000U; delay--;) {
 	}
 }
 
@@ -165,7 +165,7 @@ static struct device *cmp_dev;
 
 static void setup_aon_comparator(void)
 {
-	volatile u32_t delay = 0;
+	volatile u32_t delay = 0U;
 
 	cmp_dev = device_get_binding("AIO_CMP_0");
 
@@ -174,7 +174,7 @@ static void setup_aon_comparator(void)
 
 	/* Wait for the comparator to be grounded. */
 	printk("USER_ACTION: Ground the comparator pin.\n");
-	for (delay = 0; delay < 5000000; delay++) {
+	for (delay = 0U; delay < 5000000; delay++) {
 	}
 
 	aio_cmp_configure(cmp_dev, CMP_INTERRUPT_PIN,
@@ -210,7 +210,7 @@ static void do_soc_sleep(enum power_states state)
 						DEVICE_PM_SUSPEND_STATE);
 	}
 
-	_sys_soc_set_power_state(state);
+	sys_set_power_state(state);
 
 	/*
 	 * Before enabling the interrupts, check the wake source
@@ -242,7 +242,7 @@ static void do_soc_sleep(enum power_states state)
 	}
 }
 
-int _sys_soc_suspend(s32_t ticks)
+int sys_suspend(s32_t ticks)
 {
 	enum power_states state;
 	int pm_operation = SYS_PM_NOT_HANDLED;
@@ -298,12 +298,12 @@ int _sys_soc_suspend(s32_t ticks)
 		 */
 		setup_wake_event();
 		pm_operation = SYS_PM_LOW_POWER_STATE;
-		_sys_soc_set_power_state(state);
+		sys_set_power_state(state);
 		break;
 	case SYS_POWER_STATE_DEEP_SLEEP:
 	case SYS_POWER_STATE_DEEP_SLEEP_1:
 		/* Don't need pm idle exit notification */
-		_sys_soc_pm_idle_exit_notification_disable();
+		sys_pm_idle_exit_notification_disable();
 
 		pm_operation = SYS_PM_DEEP_SLEEP;
 		do_soc_sleep(state);
@@ -317,14 +317,14 @@ int _sys_soc_suspend(s32_t ticks)
 		if (!post_ops_done) {
 			post_ops_done = 1;
 			printk("Exiting %s state\n", state_to_string(state));
-			_sys_soc_power_state_post_ops(state);
+			sys_power_state_post_ops(state);
 		}
 	}
 
 	return pm_operation;
 }
 
-void _sys_soc_resume(void)
+void sys_resume(void)
 {
 	enum power_states state = states_list[current_state];
 
@@ -337,12 +337,12 @@ void _sys_soc_resume(void)
 		if (!post_ops_done) {
 			post_ops_done = 1;
 			printk("Exiting %s state\n", state_to_string(state));
-			_sys_soc_power_state_post_ops(state);
+			sys_power_state_post_ops(state);
 		}
 		break;
 	case SYS_POWER_STATE_DEEP_SLEEP:
 	case SYS_POWER_STATE_DEEP_SLEEP_1:
-		/* Do not perform post_ops in _sys_soc_resume for deep sleep.
+		/* Do not perform post_ops in sys_resume for deep sleep.
 		 * This would make the application task run without the full
 		 * context restored.
 		 */

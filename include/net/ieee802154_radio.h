@@ -107,7 +107,7 @@ struct ieee802154_radio_api {
 		       void (*done_cb)(struct device *dev,
 				       s16_t max_ed));
 #endif /* CONFIG_NET_L2_OPENTHREAD */
-} __packed;
+};
 
 #define IEEE802154_AR_FLAG_SET (0x20)
 
@@ -123,24 +123,10 @@ struct ieee802154_radio_api {
  */
 static inline bool ieee802154_is_ar_flag_set(struct net_pkt *pkt)
 {
-	return (*net_pkt_ll(pkt) & IEEE802154_AR_FLAG_SET);
+	return (*net_pkt_data(pkt) & IEEE802154_AR_FLAG_SET);
 }
 
 #ifndef CONFIG_IEEE802154_RAW_MODE
-
-/**
- * @brief Radio driver sending function that hw drivers should use
- *
- * @details This function should be used to fill in struct net_if's send
- * pointer.
- *
- * @param iface A valid pointer on a network interface to send from
- * @param pkt A valid pointer on a packet to send
- *
- * @return 0 on success, negative value otherwise
- */
-extern int ieee802154_radio_send(struct net_if *iface,
-				 struct net_pkt *pkt);
 
 /**
  * @brief Radio driver ACK handling function that hw drivers should use
@@ -164,12 +150,6 @@ extern enum net_verdict ieee802154_radio_handle_ack(struct net_if *iface,
 void ieee802154_init(struct net_if *iface);
 
 #else /* CONFIG_IEEE802154_RAW_MODE */
-
-static inline int ieee802154_radio_send(struct net_if *iface,
-					struct net_pkt *pkt)
-{
-	return 0;
-}
 
 static inline enum net_verdict ieee802154_radio_handle_ack(struct net_if *iface,
 							   struct net_pkt *pkt)
