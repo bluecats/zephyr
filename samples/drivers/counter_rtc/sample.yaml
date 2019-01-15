@@ -1,0 +1,13 @@
+sample:
+  name: Counter RTC Driver Sample
+tests:
+  test:
+    tags: drivers
+    harness: console
+    harness_config:
+        type: multi_line
+        ordered: true
+        regex:
+            - "Test Counter RTC driver"
+            - "Alarm"
+    depends_on: counter
