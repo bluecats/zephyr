@@ -133,20 +133,22 @@ static inline int register_event(struct k_poll_event *event,
 /* must be called with interrupts locked */
 static inline void clear_event_registration(struct k_poll_event *event)
 {
+	bool remove = false;
+
 	event->poller = NULL;
 
 	switch (event->type) {
 	case K_POLL_TYPE_SEM_AVAILABLE:
 		__ASSERT(event->sem != NULL, "invalid semaphore\n");
-		sys_dlist_remove(&event->_node);
+		remove = true;
 		break;
 	case K_POLL_TYPE_DATA_AVAILABLE:
 		__ASSERT(event->queue != NULL, "invalid queue\n");
-		sys_dlist_remove(&event->_node);
+		remove = true;
 		break;
 	case K_POLL_TYPE_SIGNAL:
 		__ASSERT(event->signal != NULL, "invalid poll signal\n");
-		sys_dlist_remove(&event->_node);
+		remove = true;
 		break;
 	case K_POLL_TYPE_IGNORE:
 		/* nothing to do */
@@ -154,6 +156,9 @@ static inline void clear_event_registration(struct k_poll_event *event)
 	default:
 		__ASSERT(false, "invalid event type\n");
 		break;
+	}
+	if (remove && sys_dnode_is_linked(&event->_node)) {
+		sys_dlist_remove(&event->_node);
 	}
 }
 
@@ -332,7 +337,7 @@ static int signal_poll_event(struct k_poll_event *event, u32_t state)
 	__ASSERT(event->poller->thread != NULL,
 		 "poller should have a thread\n");
 
-	event->poller->is_polling = true;
+	event->poller->is_polling = false;
 
 	if (!_is_thread_pending(thread)) {
 		goto ready_event;

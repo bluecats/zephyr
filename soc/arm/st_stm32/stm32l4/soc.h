@@ -30,9 +30,10 @@
  */
 #include <kernel_includes.h>
 
-#define GPIO_REG_SIZE         0x400
-/* base address for where GPIO registers start */
-#define GPIO_PORTS_BASE       (GPIOA_BASE)
+#ifdef CONFIG_GPIO_STM32
+/* Required to enable VDDio2 for port G */
+#include <stm32l4xx_ll_pwr.h>
+#endif
 
 #ifdef CONFIG_SERIAL_HAS_DRIVER
 #include <stm32l4xx_ll_usart.h>
@@ -73,6 +74,10 @@
 /* Required to remove USB transceiver supply isolation */
 #include <stm32l4xx_ll_pwr.h>
 #endif /* CONFIG_USB */
+
+#ifdef CONFIG_GPIO_STM32
+#include <stm32l4xx_ll_gpio.h>
+#endif
 
 #endif /* !_ASMLANGUAGE */
 

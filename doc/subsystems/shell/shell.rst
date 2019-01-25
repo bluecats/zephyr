@@ -1,7 +1,11 @@
-.. _shell:
+.. _shell_label:
 
 Shell
 ######
+
+.. contents::
+    :local:
+    :depth: 2
 
 Overview
 ********
@@ -34,12 +38,11 @@ At this point, the following transport layers are implemented:
 * Segger RTT
 * DUMMY - not a physical transport layer
 
-See the :ref:`shell_api` documentation for more information.
-
 Connecting to Segger RTT via TCP (on macOS, for example)
 ========================================================
 
-On macOS JLinkRTTClient won't let you enter input. Instead, please use following procedure:
+On macOS JLinkRTTClient won't let you enter input. Instead, please use following
+procedure:
 
 * Open up a first Terminal window and enter:
 
@@ -55,7 +58,8 @@ On macOS JLinkRTTClient won't let you enter input. Instead, please use following
 
      nc localhost 19021
 
-* Now you should have a network connection to RTT that will let you enter input to the shell.
+* Now you should have a network connection to RTT that will let you enter input
+  to the shell.
 
 
 Commands
@@ -363,21 +367,33 @@ The shell module supports the following meta keys:
 
    * - Meta keys
      - Action
-   * - ctrl + a
+   * - :kbd:`Ctrl + a`
      - Moves the cursor to the beginning of the line.
-   * - ctrl + c
+   * - :kbd:`Ctrl + b`
+     - Moves the cursor backward one character.
+   * - :kbd:`Ctrl + c`
      - Preserves the last command on the screen and starts a new command in
        a new line.
-   * - ctrl + e
+   * - :kbd:`Ctrl + d`
+     - Deletes the character under the cursor.
+   * - :kbd:`Ctrl + e`
      - Moves the cursor to the end of the line.
-   * - ctrl + l
+   * - :kbd:`Ctrl + f`
+     - Moves the cursor forward one character.
+   * - :kbd:`Ctrl + k`
+     - Deletes from the cursor to the end of the line.
+   * - :kbd:`Ctrl + l`
      - Clears the screen and leaves the currently typed command at the top of
        the screen.
-   * - ctrl + u
+   * - :kbd:`Ctrl + u`
      - Clears the currently typed command.
-   * - ctrl + w
+   * - :kbd:`Ctrl + w`
      - Removes the word or part of the word to the left of the cursor. Words
        separated by period instead of space are treated as one word.
+   * - :kbd:`Alt + b`
+     - Moves the cursor backward one word.
+   * - :kbd:`Alt + f`
+     - Moves the cursor forward one word.
 
 Usage
 *****
@@ -481,3 +497,9 @@ are :c:macro:`SHELL_DEFINE` arguments.
 	block, for example, by a UART with hardware flow control. If timeout is
 	set too high, the logger thread could be blocked and impact other logger
 	backends.
+
+API Reference
+*************
+
+.. doxygengroup:: shell_api
+   :project: Zephyr
