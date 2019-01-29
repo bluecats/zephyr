@@ -207,7 +207,6 @@ enum spi_async_event_type {
 	SPI_ASYNC_EVENT_TYPE_SIGNAL,
 	SPI_ASYNC_EVENT_TYPE_SEMAPHORE,
 	SPI_ASYNC_EVENT_TYPE_MUTEX,
-	SPI_ASYNC_EVENT_TYPE_ALERT,
 };
 
 /** @struct spi_async_event
@@ -229,7 +228,6 @@ struct spi_async_event {
 		struct k_poll_signal *signal;
 		struct k_sem *sem;
 		struct k_mutex *mutex;
-		struct k_alert *alert;
 	};
 };
 

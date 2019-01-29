@@ -146,9 +146,6 @@ static inline void spi_context_complete(struct spi_context *ctx, int status)
 			case SPI_ASYNC_EVENT_TYPE_MUTEX:
 				k_mutex_unlock(ctx->signal->mutex);
 				break;
-			case SPI_ASYNC_EVENT_TYPE_ALERT:
-				k_alert_send(ctx->signal->alert);
-				break;
 			default:
 				LOG_ERR("Unknown type event callback for SPI");
 				break;
