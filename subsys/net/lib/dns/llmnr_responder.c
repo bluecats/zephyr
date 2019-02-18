@@ -473,7 +473,7 @@ static int dns_read(struct net_context *ctx,
 	int offset;
 	int ret;
 
-	data_len = min(net_pkt_appdatalen(pkt), DNS_RESOLVER_MAX_BUF_SIZE);
+	data_len = MIN(net_pkt_appdatalen(pkt), DNS_RESOLVER_MAX_BUF_SIZE);
 	offset = net_pkt_get_len(pkt) - data_len;
 
 	/* Store the DNS query name into a temporary net_buf. This means
@@ -548,6 +548,8 @@ quit:
 
 static void recv_cb(struct net_context *net_ctx,
 		    struct net_pkt *pkt,
+		    union net_ip_header *ip_hdr,
+		    union net_proto_header *proto_hdr,
 		    int status,
 		    void *user_data)
 {

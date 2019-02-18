@@ -111,6 +111,8 @@ static inline void vector_to_irq(int irq_nbr, int *may_swap)
 			*may_swap = 1;
 		}
 	}
+
+	sys_trace_isr_exit();
 	/* _int_latency_stop(); */
 
 	bs_trace_raw_time(7, "Irq %i (%s) ended\n", irq_nbr, irqnames[irq_nbr]);
@@ -170,7 +172,7 @@ void posix_irq_handler(void)
 		&& (CPU_will_be_awaken_from_WFE == false)
 		&& (_kernel.ready_q.cache != _current)) {
 
-		_Swap(irq_lock);
+		_Swap_irqlock(irq_lock);
 	}
 }
 

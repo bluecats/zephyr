@@ -247,7 +247,6 @@ enum shell_state {
 	SHELL_STATE_UNINITIALIZED,
 	SHELL_STATE_INITIALIZED,
 	SHELL_STATE_ACTIVE,
-	SHELL_STATE_COMMAND,
 	SHELL_STATE_PANIC_MODE_ACTIVE,  /*!< Panic activated.*/
 	SHELL_STATE_PANIC_MODE_INACTIVE /*!< Panic requested, not supported.*/
 };
@@ -293,16 +292,19 @@ struct shell_transport_api {
 	int (*uninit)(const struct shell_transport *transport);
 
 	/**
-	 * @brief Function for reconfiguring the transport to work in blocking
-	 * mode.
+	 * @brief Function for enabling transport in given TX mode.
 	 *
-	 * @param transport  Pointer to the transfer instance.
-	 * @param blocking   If true, the transport is enabled in blocking mode.
+	 * Function can be used to reconfigure TX to work in blocking mode.
+	 *
+	 * @param transport   Pointer to the transfer instance.
+	 * @param blocking_tx If true, the transport TX is enabled in blocking
+	 *		      mode.
 	 *
 	 * @return NRF_SUCCESS on successful enabling, error otherwise (also if
 	 * not supported).
 	 */
-	int (*enable)(const struct shell_transport *transport, bool blocking);
+	int (*enable)(const struct shell_transport *transport,
+		      bool blocking_tx);
 
 	/**
 	 * @brief Function for writing data to the transport interface.
@@ -372,6 +374,7 @@ struct shell_flags {
 	u32_t tx_rdy      :1;
 	u32_t mode_delete :1; /*!< Operation mode of backspace key */
 	u32_t history_exit:1; /*!< Request to exit history mode */
+	u32_t cmd_ctx	  :1; /*!< Shell is executing command */
 	u32_t last_nl     :8; /*!< Last received new line character */
 };
 
@@ -391,8 +394,7 @@ enum shell_signal {
 	SHELL_SIGNAL_RXRDY,
 	SHELL_SIGNAL_LOG_MSG,
 	SHELL_SIGNAL_KILL,
-	SHELL_SIGNAL_COMMAND_EXIT,
-	SHELL_SIGNAL_TXDONE,
+	SHELL_SIGNAL_TXDONE, /* TXDONE must be last one before SHELL_SIGNALS */
 	SHELL_SIGNALS
 };
 
@@ -400,6 +402,8 @@ enum shell_signal {
  * @brief Shell instance context.
  */
 struct shell_ctx {
+	const char *prompt; /*!< shell current prompt. */
+
 	enum shell_state state; /*!< Internal module state.*/
 	enum shell_receive_state receive_state;/*!< Escape sequence indicator.*/
 
@@ -446,7 +450,7 @@ enum shell_flag {
  * @brief Shell instance internals.
  */
 struct shell {
-	char *const prompt; /*!< shell prompt. */
+	const char *default_prompt; /*!< shell default prompt. */
 
 	const struct shell_transport *iface; /*!< Transport interface.*/
 	struct shell_ctx *ctx; /*!< Internal context.*/
@@ -474,7 +478,7 @@ extern void shell_print_stream(const void *user_ctx, const char *data,
  * @brief Macro for defining a shell instance.
  *
  * @param[in] _name		Instance name.
- * @param[in] _prompt		Shell prompt string.
+ * @param[in] _prompt		Shell default prompt string.
  * @param[in] _transport_iface	Pointer to the transport interface.
  * @param[in] _log_queue_size	Logger processing queue size.
  * @param[in] _log_timeout	Logger thread timeout in milliseconds on full
@@ -487,12 +491,11 @@ extern void shell_print_stream(const void *user_ctx, const char *data,
 		     _log_queue_size, _log_timeout, _shell_flag)	      \
 	static const struct shell _name;				      \
 	static struct shell_ctx UTIL_CAT(_name, _ctx);			      \
-	static char _name##prompt[CONFIG_SHELL_PROMPT_LENGTH + 1] = _prompt;  \
 	static u8_t _name##_out_buffer[CONFIG_SHELL_PRINTF_BUFF_SIZE];	      \
 	SHELL_LOG_BACKEND_DEFINE(_name, _name##_out_buffer,		      \
 				 CONFIG_SHELL_PRINTF_BUFF_SIZE,		      \
 				 _log_queue_size, _log_timeout);	      \
-	SHELL_HISTORY_DEFINE(_name, 128, 8);/*todo*/			      \
+	SHELL_HISTORY_DEFINE(_name, CONFIG_SHELL_CMD_BUFF_SIZE, 7);	      \
 	SHELL_FPRINTF_DEFINE(_name##_fprintf, &_name, _name##_out_buffer,     \
 			     CONFIG_SHELL_PRINTF_BUFF_SIZE,		      \
 			     true, shell_print_stream);			      \
@@ -501,7 +504,7 @@ extern void shell_print_stream(const void *user_ctx, const char *data,
 	static K_THREAD_STACK_DEFINE(_name##_stack, CONFIG_SHELL_STACK_SIZE); \
 	static struct k_thread _name##_thread;				      \
 	static const struct shell _name = {				      \
-		.prompt = _name##prompt,				      \
+		.default_prompt = _prompt,				      \
 		.iface = _transport_iface,				      \
 		.ctx = &UTIL_CAT(_name, _ctx),				      \
 		.history = SHELL_HISTORY_PTR(_name),			      \
@@ -558,45 +561,43 @@ int shell_start(const struct shell *shell);
 int shell_stop(const struct shell *shell);
 
 /**
- * @brief Terminal default text color for nrf_shell_fprintf function.
+ * @brief Terminal default text color for shell_fprintf function.
  */
 #define SHELL_NORMAL	SHELL_VT100_COLOR_DEFAULT
 
 /**
- * @brief Green text color for nrf_shell_fprintf function.
+ * @brief Green text color for shell_fprintf function.
  */
 #define SHELL_INFO	SHELL_VT100_COLOR_GREEN
 
 /**
- * @brief Cyan text color for nrf_shell_fprintf function.
+ * @brief Cyan text color for shell_fprintf function.
  */
 #define SHELL_OPTION	SHELL_VT100_COLOR_CYAN
 
 /**
- * @brief Yellow text color for nrf_shell_fprintf function.
+ * @brief Yellow text color for shell_fprintf function.
  */
 #define SHELL_WARNING	SHELL_VT100_COLOR_YELLOW
 
 /**
- * @brief Red text color for nrf_shell_fprintf function.
+ * @brief Red text color for shell_fprintf function.
  */
 #define SHELL_ERROR	SHELL_VT100_COLOR_RED
 
 /**
  * @brief printf-like function which sends formatted data stream to the shell.
  *
- * This function shall not be used outside of the shell command context unless
- * command requested to stay in the foreground (see @ref shell_command_enter).
- * In that case, function can be called from any thread context until command is
- * terminated with CTRL+C or @ref shell_command_exit call.
+ * This function can be used from the command handler or from threads, but not
+ * from an interrupt context.
  *
  * @param[in] shell	Pointer to the shell instance.
  * @param[in] color	Printed text color.
- * @param[in] p_fmt	Format string.
+ * @param[in] fmt	Format string.
  * @param[in] ...	List of parameters to print.
  */
 void shell_fprintf(const struct shell *shell, enum shell_vt100_color color,
-		   const char *p_fmt, ...);
+		   const char *fmt, ...);
 
 /**
  * @brief Print info message to the shell.
@@ -655,33 +656,15 @@ void shell_fprintf(const struct shell *shell, enum shell_vt100_color color,
 void shell_process(const struct shell *shell);
 
 /**
- * @brief Indicate to shell that command stay in foreground, blocking the shell.
- *
- * Command in foreground is terminated by @ref shell_command_exit or CTRL+C.
- *
- * @param[in] shell	Pointer to the shell instance.
- */
-void shell_command_enter(const struct shell *shell);
-
-/**
- * @brief Exit command in foreground state.
- *
- * See @ref shell_command_enter.
- *
- * @param[in] shell	Pointer to the shell instance.
- */
-void shell_command_exit(const struct shell *shell);
-
-/**
  * @brief Change displayed shell prompt.
  *
  * @param[in] shell	Pointer to the shell instance.
  * @param[in] prompt	New shell prompt.
  *
  * @return 0		Success.
- * @return -ENOMEM	New prompt is too long.
+ * @return -EINVAL	Pointer to new prompt is not correct.
  */
-int shell_prompt_change(const struct shell *shell, char *prompt);
+int shell_prompt_change(const struct shell *shell, const char *prompt);
 
 /**
  * @brief Prints the current command help.
@@ -701,7 +684,10 @@ void shell_help(const struct shell *shell);
  * Pass command line to shell to execute.
  *
  * Note: This by no means makes any of the commands a stable interface, so
- * this function should only be used for debugging/diagnostic.
+ * 	 this function should only be used for debugging/diagnostic.
+ *
+ *	 This function must not be called from shell command context!
+
  *
  * @param[in] shell	Pointer to the shell instance. It can be NULL when
  *			the :option:`CONFIG_SHELL_BACKEND_DUMMY` option is

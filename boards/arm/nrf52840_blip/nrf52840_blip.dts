@@ -96,16 +96,16 @@
 
 &spi0 {
 	status = "ok";
-	sck-pin = <25>;
-	mosi-pin = <34>;
-	miso-pin = <24>;
+	sck-pin = <19>;
+	mosi-pin = <20>;
+	miso-pin = <21>;
 };
 
 &spi1 {
 	status = "ok";
-	sck-pin = <19>;
-	mosi-pin = <20>;
-	miso-pin = <21>;
+	sck-pin = <25>;
+	mosi-pin = <34>;
+	miso-pin = <24>;
 };
 
 &spi2 {
@@ -125,7 +125,7 @@
 &flash0 {
 	/*
 	 * For more information, see:
-	 * http://docs.zephyrproject.org/latest/devices/dts/flash_partitions.html
+	 * http://docs.zephyrproject.org/latest/guides/dts/index.html#flash-partitions
 	 */
 	partitions {
 		compatible = "fixed-partitions";

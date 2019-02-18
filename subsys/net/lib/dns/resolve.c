@@ -340,7 +340,7 @@ static int dns_read(struct dns_resolve_context *ctx,
 	int ret;
 	int server_idx, query_idx;
 
-	data_len = min(net_pkt_appdatalen(pkt), DNS_RESOLVER_MAX_BUF_SIZE);
+	data_len = MIN(net_pkt_appdatalen(pkt), DNS_RESOLVER_MAX_BUF_SIZE);
 	offset = net_pkt_get_len(pkt) - data_len;
 
 	/* TODO: Instead of this temporary copy, just use the net_pkt directly.
@@ -512,6 +512,8 @@ quit:
 
 static void cb_recv(struct net_context *net_ctx,
 		    struct net_pkt *pkt,
+		    union net_ip_header *ip_hdr,
+		    union net_proto_header *proto_hdr,
 		    int status,
 		    void *user_data)
 {

@@ -251,7 +251,7 @@ static int copy_pkt_to_buf(struct net_buf *src, u16_t offset,
 	}
 
 	for (copied = 0U; src && n_bytes > 0; offset = 0U) {
-		to_copy = min(n_bytes, src->len - offset);
+		to_copy = MIN(n_bytes, src->len - offset);
 
 		memcpy(dst + copied, (char *)src->data + offset, to_copy);
 		copied += to_copy;
@@ -536,7 +536,11 @@ int nats_publish(const struct nats *nats,
 	});
 }
 
-static void receive_cb(struct net_context *ctx, struct net_pkt *pkt, int status,
+static void receive_cb(struct net_context *ctx,
+		       struct net_pkt *pkt,
+		       union net_ip_header *ip_hdr,
+		       union net_proto_header *proto_hdr,
+		       int status,
 		       void *user_data)
 {
 	struct nats *nats = user_data;

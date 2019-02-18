@@ -662,7 +662,7 @@ static void l2cap_chan_rx_init(struct bt_l2cap_le_chan *chan)
 	/* MPS shall not be bigger than MTU + 2 as the remaining bytes cannot
 	 * be used.
 	 */
-	chan->rx.mps = min(chan->rx.mtu + 2, L2CAP_MAX_LE_MPS);
+	chan->rx.mps = MIN(chan->rx.mtu + 2, L2CAP_MAX_LE_MPS);
 	k_sem_init(&chan->rx.credits, 0, UINT_MAX);
 
 	if (BT_DBG_ENABLED &&
@@ -1085,9 +1085,9 @@ segment:
 	}
 
 	/* Don't send more that TX MPS including SDU length */
-	len = min(net_buf_tailroom(seg), ch->tx.mps - sdu_hdr_len);
+	len = MIN(net_buf_tailroom(seg), ch->tx.mps - sdu_hdr_len);
 	/* Limit if original buffer is smaller than the segment */
-	len = min(buf->len, len);
+	len = MIN(buf->len, len);
 	net_buf_add_mem(seg, buf->data, len);
 	net_buf_pull(buf, len);
 
@@ -1278,7 +1278,7 @@ static void reject_cmd(struct bt_l2cap *l2cap, u8_t ident,
 static int l2cap_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 {
 	struct bt_l2cap *l2cap = CONTAINER_OF(chan, struct bt_l2cap, chan);
-	struct bt_l2cap_sig_hdr *hdr = (void *)buf->data;
+	struct bt_l2cap_sig_hdr *hdr;
 	u16_t len;
 
 	if (buf->len < sizeof(*hdr)) {
@@ -1286,8 +1286,8 @@ static int l2cap_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 		return 0;
 	}
 
+	hdr = net_buf_pull_mem(buf, sizeof(*hdr));
 	len = sys_le16_to_cpu(hdr->len);
-	net_buf_pull(buf, sizeof(*hdr));
 
 	BT_DBG("Signaling code 0x%02x ident %u len %u", hdr->code,
 	       hdr->ident, len);
@@ -1575,7 +1575,7 @@ static void l2cap_chan_recv(struct bt_l2cap_chan *chan, struct net_buf *buf)
 
 void bt_l2cap_recv(struct bt_conn *conn, struct net_buf *buf)
 {
-	struct bt_l2cap_hdr *hdr = (void *)buf->data;
+	struct bt_l2cap_hdr *hdr;
 	struct bt_l2cap_chan *chan;
 	u16_t cid;
 
@@ -1591,8 +1591,8 @@ void bt_l2cap_recv(struct bt_conn *conn, struct net_buf *buf)
 		return;
 	}
 
+	hdr = net_buf_pull_mem(buf, sizeof(*hdr));
 	cid = sys_le16_to_cpu(hdr->cid);
-	net_buf_pull(buf, sizeof(*hdr));
 
 	BT_DBG("Packet for CID %u len %u", cid, buf->len);
 

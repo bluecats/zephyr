@@ -95,7 +95,7 @@ static int spi_sam0_configure(struct device *dev,
 
 	/* Use the requested or next higest possible frequency */
 	div = (SOC_ATMEL_SAM0_GCLK0_FREQ_HZ / config->frequency) / 2 - 1;
-	div = max(0, min(UINT8_MAX, div));
+	div = MAX(0, MIN(UINT8_MAX, div));
 
 	/* Update the configuration only if it has changed */
 	if (regs->CTRLA.reg != ctrla.reg || regs->CTRLB.reg != ctrlb.reg ||
@@ -472,7 +472,7 @@ static const struct spi_driver_api spi_sam0_driver_api = {
 	.release = spi_sam0_release,
 };
 
-#define CONFIG_SPI_SAM0_SERCOM_PADS(n) \
+#define SPI_SAM0_SERCOM_PADS(n) \
 	SERCOM_SPI_CTRLA_DIPO(DT_SPI_SAM0_SERCOM##n##_DIPO) | \
 	SERCOM_SPI_CTRLA_DOPO(DT_SPI_SAM0_SERCOM##n##_DOPO)
 
@@ -481,7 +481,7 @@ static const struct spi_driver_api spi_sam0_driver_api = {
 		.regs = (SercomSpi *)DT_SPI_SAM0_SERCOM##n##_BASE_ADDRESS, \
 		.pm_apbcmask = PM_APBCMASK_SERCOM##n,                        \
 		.gclk_clkctrl_id = GCLK_CLKCTRL_ID_SERCOM##n##_CORE,         \
-		.pads = CONFIG_SPI_SAM0_SERCOM_PADS(n)                       \
+		.pads = SPI_SAM0_SERCOM_PADS(n)                       \
 	}
 
 #define SPI_SAM0_DEVICE_INIT(n)                                              \

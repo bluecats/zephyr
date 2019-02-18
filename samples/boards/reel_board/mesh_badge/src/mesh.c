@@ -70,7 +70,7 @@ static void heartbeat(u8_t hops, u16_t feat)
 
 static struct bt_mesh_cfg_srv cfg_srv = {
 	.relay = BT_MESH_RELAY_ENABLED,
-	.beacon = BT_MESH_BEACON_ENABLED,
+	.beacon = BT_MESH_BEACON_DISABLED,
 	.default_ttl = DEFAULT_TTL,
 
 	/* 3 transmissions with 20ms interval */
@@ -322,7 +322,7 @@ static void vnd_hello(struct bt_mesh_model *model,
 		return;
 	}
 
-	len = min(buf->len, HELLO_MAX);
+	len = MIN(buf->len, HELLO_MAX);
 	memcpy(str, buf->data, len);
 	str[len] = '\0';
 
@@ -417,7 +417,7 @@ static void send_hello(struct k_work *work)
 
 	bt_mesh_model_msg_init(&msg, OP_VND_HELLO);
 	net_buf_simple_add_mem(&msg, name,
-			       min(HELLO_MAX, first_name_len(name)));
+			       MIN(HELLO_MAX, first_name_len(name)));
 
 	if (bt_mesh_model_send(&vnd_models[0], &ctx, &msg, NULL, NULL) == 0) {
 		board_show_text("Saying \"hi!\" to everyone", false,

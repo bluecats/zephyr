@@ -48,7 +48,7 @@ static u32_t elapsed(void)
 }
 
 /* Callout out of platform assembly, not hooked via IRQ_CONNECT... */
-void _timer_int_handler(void *arg)
+void z_clock_isr(void *arg)
 {
 	ARG_UNUSED(arg);
 	u32_t dticks;
@@ -93,7 +93,7 @@ void z_clock_set_timeout(s32_t ticks, bool idle)
 #if defined(CONFIG_TICKLESS_KERNEL) && !defined(CONFIG_QEMU_TICKLESS_WORKAROUND)
 	u32_t delay;
 
-	ticks = min(MAX_TICKS, max(ticks - 1, 0));
+	ticks = MIN(MAX_TICKS, MAX(ticks - 1, 0));
 
 	/* Desired delay in the future */
 	delay = (ticks == 0) ? MIN_DELAY : ticks * CYC_PER_TICK;

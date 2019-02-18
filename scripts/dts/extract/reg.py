@@ -46,28 +46,16 @@ class DTReg(DTDirective):
                     pass
 
                 if cs_gpios:
-                    # Newer versions of dtc might have the property look like
-                    # cs-gpios = <0x05 0x0d 0x00>, < 0x06 0x00 0x00>;
-                    # So we need to flatten the list in that case
-                    if isinstance(cs_gpios[0], list):
-                        cs_gpios = [item for sublist in cs_gpios for item in sublist]
-
                     extract_controller(node_address, "cs-gpios", cs_gpios, reg[0], def_label, "cs-gpio", True)
                     extract_cells(node_address, "cs-gpios", cs_gpios, None, reg[0], def_label, "cs-gpio", True)
 
         # generate defines
         l_base = def_label.split('/')
-        l_addr = [convert_string_to_label("BASE_ADDRESS")]
+        l_addr = [str_to_label("BASE_ADDRESS")]
         l_size = ["SIZE"]
 
         index = 0
         props = list(reg)
-
-        # Newer versions of dtc might have the reg propertly look like
-        # reg = <1 2>, <3 4>;
-        # So we need to flatten the list in that case
-        if isinstance(props[0], list):
-            props = [item for sublist in props for item in sublist]
 
         while props:
             prop_def = {}
@@ -115,17 +103,16 @@ class DTReg(DTDirective):
                 add_prop_aliases(
                     node_address,
                     lambda alias:
-                        '_'.join([convert_string_to_label(alias)] +
-                                 l_addr + l_idx),
+                        '_'.join([str_to_label(alias)] + l_addr + l_idx),
                     l_addr_fqn,
                     prop_alias)
-                add_prop_aliases(
-                    node_address,
-                    lambda alias:
-                        '_'.join([convert_string_to_label(alias)] +
-                                 l_size + l_idx),
-                    l_size_fqn,
-                    prop_alias)
+                if nr_size_cells:
+                    add_prop_aliases(
+                        node_address,
+                        lambda alias:
+                            '_'.join([str_to_label(alias)] + l_size + l_idx),
+                        l_size_fqn,
+                        prop_alias)
 
             insert_defs(node_address, prop_def, prop_alias)
 

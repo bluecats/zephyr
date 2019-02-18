@@ -12,9 +12,11 @@ toolchain:
   - zephyr
   - gnuarmemb
   - xtools
-ram: 128
-flash: 128
+ram: 32768
+flash: 65536
 supported:
+  - display
   - i2c
   - spi
   - netif:eth
+  - hwinfo

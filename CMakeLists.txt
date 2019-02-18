@@ -59,10 +59,7 @@ zephyr_library_named(zephyr)
 
 zephyr_include_directories(
   kernel/include
-  arch/${ARCH}/include
-  ${SOC_DIR}/${ARCH}/${SOC_PATH}
-  ${SOC_DIR}/${ARCH}/${SOC_PATH}/include
-  ${SOC_DIR}/${ARCH}/${SOC_FAMILY}/include
+  ${ARCH_DIR}/${ARCH}/include
   include
   include/drivers
   ${PROJECT_BINARY_DIR}/include/generated
@@ -70,15 +67,30 @@ zephyr_include_directories(
   ${STDINCLUDE}
 )
 
+# Don't add non-existing include directories, it creates noise and
+# warnings in some tooling
+foreach(optional_include_dir
+  ${SOC_DIR}/${ARCH}/${SOC_PATH}
+  ${SOC_DIR}/${ARCH}/${SOC_PATH}/include
+  ${SOC_DIR}/${ARCH}/${SOC_FAMILY}/include
+  )
+  if(EXISTS ${optional_include_dir})
+    zephyr_include_directories(${optional_include_dir})
+  endif()
+endforeach()
+
 zephyr_compile_definitions(
   KERNEL
   __ZEPHYR__=1
 )
 
-if(NOT CONFIG_NO_OPTIMIZATIONS)
-zephyr_compile_definitions(
-  _FORTIFY_SOURCE=2
-)
+# @Intent: Set compiler flags to enable buffer overflow checks in libc functions
+# @config in CONFIG_NO_OPTIMIZATIONS optional : Optimizations may affect security
+toolchain_cc_security_fortify()
+
+# @Intent: Set compiler flags to detect general stack overflows across all functions
+if(CONFIG_STACK_CANARIES)
+  toolchain_cc_security_canaries()
 endif()
 
 if(BUILD_VERSION)
@@ -247,28 +259,21 @@ if(W MATCHES "3")
     )
 endif()
 
+if(NOT CONFIG_STD_CPP98) # "register" keyword was deprecated since C++11.
+  zephyr_compile_options(
+    $<$<COMPILE_LANGUAGE:CXX>:-Wno-register>
+    )
+endif()
+
 # Allow the user to inject options when calling cmake, e.g.
 # 'cmake -DEXTRA_CFLAGS="-Werror -Wno-deprecated-declarations" ..'
 include(cmake/extra_flags.cmake)
-
-if(CONFIG_READABLE_ASM)
-  zephyr_cc_option(-fno-reorder-blocks)
-  zephyr_cc_option(-fno-ipa-cp-clone)
-  zephyr_cc_option(-fno-partial-inlining)
-endif()
 
 zephyr_cc_option(-fno-asynchronous-unwind-tables)
 zephyr_cc_option(-fno-pie)
 zephyr_cc_option(-fno-pic)
 zephyr_cc_option(-fno-strict-overflow)
 zephyr_cc_option(-Wno-pointer-sign)
-
-if(CONFIG_STACK_CANARIES)
-  zephyr_compile_options(-fstack-protector-all)
-
-  # Only a valid option with GCC 7.x and above
-  zephyr_cc_option(-mstack-protector-guard=global)
-endif()
 
 if(CONFIG_OVERRIDE_FRAME_POINTER_DEFAULT)
   if(CONFIG_OMIT_FRAME_POINTER)
@@ -330,12 +335,9 @@ zephyr_cc_option(-Wpointer-arith)
 
 # Declare MPU userspace dependencies before the linker scripts to make
 # sure the order of dependencies are met
-if(CONFIG_CPU_HAS_MPU AND CONFIG_USERSPACE)
-  if(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT AND CONFIG_APP_SHARED_MEM )
+if(CONFIG_USERSPACE)
+  if(CONFIG_APP_SHARED_MEM)
     set(APP_SMEM_DEP app_smem_linker)
-  endif()
-  if(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT AND CONFIG_ARC AND CONFIG_APPLICATION_MEMORY)
-    set(ALIGN_SIZING_DEP app_sizing_prebuilt linker_app_sizing_script)
   endif()
   if(CONFIG_ARM)
     set(PRIV_STACK_DEP priv_stacks_prebuilt)
@@ -418,6 +420,7 @@ endif()
 configure_file(version.h.in ${PROJECT_BINARY_DIR}/include/generated/version.h)
 
 function(construct_add_custom_command_for_linker_pass linker_output_name output_variable)
+  set(extra_dependencies ${ARGN})
   set(linker_cmd_file_name ${linker_output_name}.cmd)
 
   if (${linker_output_name} MATCHES "^linker_pass_final$")
@@ -448,7 +451,10 @@ function(construct_add_custom_command_for_linker_pass linker_output_name output_
 
   set(${output_variable}
     OUTPUT ${linker_cmd_file_name}
-    DEPENDS ${LINKER_SCRIPT}
+    DEPENDS
+    ${LINKER_SCRIPT}
+    ${extra_dependencies}
+    # NB: 'linker_script_dep' will use a keyword that ends 'DEPENDS'
     ${linker_script_dep}
     COMMAND ${CMAKE_C_COMPILER}
     -x assembler-with-cpp
@@ -467,6 +473,43 @@ function(construct_add_custom_command_for_linker_pass linker_output_name output_
     PARENT_SCOPE
     )
 endfunction()
+
+# Error-out when the deprecated naming convention is found (until
+# after 1.14.0 has been released)
+foreach(path
+    ${BOARD_DIR}/dts.fixup
+    ${PROJECT_SOURCE_DIR}/soc/${ARCH}/${SOC_PATH}/dts.fixup
+    ${APPLICATION_SOURCE_DIR}/dts.fixup
+    )
+  if(EXISTS ${path})
+    message(FATAL_ERROR
+      "A deprecated filename has been detected. Porting is required."
+      "The file '${path}' exists, but it should be named dts_fixup.h instead."
+      "See https://github.com/zephyrproject-rtos/zephyr/pull/10352 for more details"
+      )
+  endif()
+endforeach()
+
+set_ifndef(  DTS_BOARD_FIXUP_FILE                                   ${BOARD_DIR}/dts_fixup.h)
+set_ifndef(    DTS_SOC_FIXUP_FILE                 ${SOC_DIR}/${ARCH}/${SOC_PATH}/dts_fixup.h)
+set(           DTS_APP_FIXUP_FILE                      ${APPLICATION_SOURCE_DIR}/dts_fixup.h)
+
+set_ifndef(DTS_CAT_OF_FIXUP_FILES ${ZEPHYR_BINARY_DIR}/include/generated/generated_dts_board_fixups.h)
+
+# Concatenate the fixups into a single header file for easy
+# #include'ing
+file(WRITE ${DTS_CAT_OF_FIXUP_FILES} "/* May only be included by generated_dts_board.h */\n\n")
+foreach(fixup_file
+    ${DTS_BOARD_FIXUP_FILE}
+    ${DTS_SOC_FIXUP_FILE}
+    ${DTS_APP_FIXUP_FILE}
+    ${shield_dts_fixups}
+    )
+  if(EXISTS ${fixup_file})
+    file(READ ${fixup_file} contents)
+    file(APPEND ${DTS_CAT_OF_FIXUP_FILES} "${contents}")
+  endif()
+endforeach()
 
 # Unfortunately, the order in which CMakeLists.txt code is processed
 # matters so we need to be careful about how we order the processing
@@ -502,6 +545,15 @@ add_subdirectory(ext)
 add_subdirectory(subsys)
 add_subdirectory(drivers)
 add_subdirectory(tests)
+
+# Add all zephyr modules subdirectories.
+message("Including module(s): ${ZEPHYR_MODULES_NAME}")
+set(index 0)
+foreach(module_name ${ZEPHYR_MODULES_NAME})
+  list(GET ZEPHYR_MODULES_DIR ${index} module_dir)
+  math(EXPR index "${index} + 1")
+  add_subdirectory(${module_dir} ${CMAKE_BINARY_DIR}/${module_name})
+endforeach()
 
 set(syscall_macros_h ${ZEPHYR_BINARY_DIR}/include/generated/syscall_macros.h)
 
@@ -642,11 +694,10 @@ gen_kobj(KOBJ_INCLUDE_PATH)
 
 set(OFFSETS_LIB offsets)
 
-set(OFFSETS_C_PATH ${ZEPHYR_BASE}/arch/${ARCH}/core/offsets/offsets.c)
-set(OFFSETS_O_PATH ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${OFFSETS_LIB}.dir/arch/${ARCH}/core/offsets/offsets.c.obj)
+set(OFFSETS_C_PATH ${ARCH_DIR}/${ARCH}/core/offsets/offsets.c)
 set(OFFSETS_H_PATH ${PROJECT_BINARY_DIR}/include/generated/offsets.h)
 
-add_library(          ${OFFSETS_LIB} STATIC ${OFFSETS_C_PATH})
+add_library(          ${OFFSETS_LIB} OBJECT ${OFFSETS_C_PATH})
 target_link_libraries(${OFFSETS_LIB} zephyr_interface)
 add_dependencies(     ${OFFSETS_LIB}
   ${SYSCALL_LIST_H_TARGET}
@@ -658,7 +709,7 @@ add_dependencies(     ${OFFSETS_LIB}
 add_custom_command(
   OUTPUT ${OFFSETS_H_PATH}
   COMMAND ${PYTHON_EXECUTABLE} ${ZEPHYR_BASE}/scripts/gen_offset_header.py
-  -i ${OFFSETS_O_PATH}
+  -i $<TARGET_OBJECTS:${OFFSETS_LIB}>
   -o ${OFFSETS_H_PATH}
   DEPENDS ${OFFSETS_LIB}
 )
@@ -698,106 +749,19 @@ endforeach()
 
 get_property(OUTPUT_FORMAT        GLOBAL PROPERTY PROPERTY_OUTPUT_FORMAT)
 
-if(CONFIG_APPLICATION_MEMORY)
-  # Objects default to being in kernel space, and then we exclude
-  # certain items.
-  set(kernel_object_file_list
-    ${ZEPHYR_LIBS_PROPERTY}
-    kernel
-    )
-  list(
-    REMOVE_ITEM
-    kernel_object_file_list
-    app
-    )
-
-  # The zephyr libraries in zephyr/lib/ and zephyr/test/ belong in
-  # userspace.
-
-  # NB: The business logic for determing what source files are in
-  # kernel space and what source files are in user space is
-  # fragile. Fix ASAP.
-  #
-  # The intended design is that certain directories are designated as
-  # containing userspace code and others for kernel space code. The
-  # implementation we have however is not working on directories of
-  # code, it is working on zephyr libraries. It is exploiting the fact
-  # that zephyr libraries follow a naming scheme as described in
-  # extensions.cmake:zephyr_library_get_current_dir_lib_name
-  #
-  # But code from test/ and lib/ that is placed in the "zephyr"
-  # library (with zephyr_sources()) will not be in a library that is
-  # prefixed with lib__ or test__ and will end up in the wrong address
-  # space.
-  set(application_space_dirs
-    lib
-    tests
-    )
-  foreach(f ${kernel_object_file_list})
-    foreach(app_dir ${application_space_dirs})
-      if(${f} MATCHES "^${app_dir}__") # Begins with ${app_dir}__, e.g. lib__libc
-        list(
-          REMOVE_ITEM
-          kernel_object_file_list
-          ${f}
-          )
-      endif()
-    endforeach()
-  endforeach()
-
-  # Create a list ks, with relative paths to kernel space libs.
-  foreach(f ${kernel_object_file_list})
-    get_target_property(target_name       ${f} NAME)
-    get_target_property(target_binary_dir ${f} BINARY_DIR)
-
-    string(REPLACE
-      ${PROJECT_BINARY_DIR}
-      ""
-      fixed_path
-      ${target_binary_dir}
-      )
-
-    # Append / if not empty
-    if(fixed_path)
-      set(fixed_path "${fixed_path}/")
-    endif()
-
-    # Cut off leading / if present
-    if(fixed_path MATCHES "^/.+")
-      string(SUBSTRING ${fixed_path} 1 -1 fixed_path)
-    endif()
-
-    set(fixed_path "${fixed_path}lib${target_name}.a")
-
-    if(CMAKE_GENERATOR STREQUAL "Ninja")
-      # Ninja invokes the linker from the root of the build directory
-      # (APPLICATION_BINARY_DIR) instead of from the build/zephyr
-      # directory (PROJECT_BINARY_DIR). So for linker-defs.h to get
-      # the correct path we need to prefix with zephyr/.
-      set(fixed_path "zephyr/${fixed_path}")
-    endif()
-
-    list(APPEND ks ${fixed_path})
-  endforeach()
-
-  # We are done constructing kernel_object_file_list, now we inject
-  # this list into the linker script through the define
-  # KERNELSPACE_OBJECT_FILES
-  set(def -DKERNELSPACE_OBJECT_FILES=)
-  foreach(f ${ks})
-    set(def "${def} ${f}")
-  endforeach()
-  set_property(GLOBAL APPEND PROPERTY
-    PROPERTY_LINKER_SCRIPT_DEFINES
-    ${def}
-    )
-endif() # CONFIG_APPLICATION_MEMORY
-
 if (CONFIG_CODE_DATA_RELOCATION)
   set(CODE_RELOCATION_DEP code_relocation_source_lib)
 endif() # CONFIG_CODE_DATA_RELOCATION
 
-construct_add_custom_command_for_linker_pass(linker custom_command)
+construct_add_custom_command_for_linker_pass(
+  linker
+  custom_command
+  ${ALIGN_SIZING_DEP}
+  ${PRIV_STACK_DEP}
+  ${APP_SMEM_DEP}
+  ${CODE_RELOCATION_DEP}
+  ${OFFSETS_H_TARGET}
+  )
 add_custom_command(
   ${custom_command}
 )
@@ -805,11 +769,7 @@ add_custom_command(
 add_custom_target(
   ${LINKER_SCRIPT_TARGET}
   DEPENDS
-  ${ALIGN_SIZING_DEP} ${PRIV_STACK_DEP}
-  ${APP_SMEM_DEP}
-  ${CODE_RELOCATION_DEP}
   linker.cmd
-  ${OFFSETS_H_TARGET}
   )
 
 # Give the '${LINKER_SCRIPT_TARGET}' target all of the include directories so
@@ -833,7 +793,7 @@ set(zephyr_lnk
   ${ZEPHYR_LIBS_PROPERTY}
   ${LINKERFLAGPREFIX},--no-whole-archive
   kernel
-  ${OFFSETS_O_PATH}
+  $<TARGET_OBJECTS:${OFFSETS_LIB}>
   ${LIB_INCLUDE_DIR}
   -L${PROJECT_BINARY_DIR}
   ${TOOLCHAIN_LIBS}
@@ -978,9 +938,10 @@ if(CONFIG_ARM AND CONFIG_USERSPACE)
   set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/${PRIV_STACKS_OUTPUT_SRC}
     PROPERTIES COMPILE_DEFINITIONS "${compile_definitions_interface}")
 
+  # always compile priv_stacks_hash.c at optimization -Os
   set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/${PRIV_STACKS_OUTPUT_SRC}
     PROPERTIES COMPILE_FLAGS
-    "${NO_COVERAGE_FLAGS} -fno-function-sections -fno-data-sections ")
+    "${NO_COVERAGE_FLAGS} -Os -fno-function-sections -fno-data-sections ")
 
   # We need precise control of where generated text/data ends up in the final
   # kernel image. Disable function/data sections and use objcopy to move
@@ -1170,76 +1131,45 @@ configure_file(
      $ENV{ZEPHYR_BASE}/include/arch/arm/cortex_m/scripts/app_smem.ld
      ${PROJECT_BINARY_DIR}/include/generated/app_smem.ld)
 
-if(CONFIG_CPU_HAS_MPU AND CONFIG_USERSPACE)
+if(CONFIG_APP_SHARED_MEM AND CONFIG_USERSPACE)
+  set(APP_SMEM_LD "${PROJECT_BINARY_DIR}/include/generated/app_smem.ld")
+  set(OBJ_FILE_DIR "${PROJECT_BINARY_DIR}/../")
 
-    if(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT AND CONFIG_APP_SHARED_MEM)
-        set(APP_SMEM_LD "${PROJECT_BINARY_DIR}/include/generated/app_smem.ld")
-        set(OBJ_FILE_DIR "${PROJECT_BINARY_DIR}/../")
-
-        add_custom_target(
-          ${APP_SMEM_DEP} ALL
-          DEPENDS app
-          kernel
-         )
-
-        add_custom_command(
-          TARGET ${APP_SMEM_DEP}
-          COMMAND ${PYTHON_EXECUTABLE}
-          ${ZEPHYR_BASE}/scripts/gen_app_partitions.py
-          -d ${OBJ_FILE_DIR}
-          -o ${APP_SMEM_LD}
-          $<$<BOOL:${CMAKE_VERBOSE_MAKEFILE}>:--verbose>
-          WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/
-          COMMENT "Generating power of 2 aligned app_smem linker section"
-         )
-  endif()
-
-
-  if(CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT AND CONFIG_ARC AND CONFIG_APPLICATION_MEMORY)
-
-    construct_add_custom_command_for_linker_pass(linker_app_sizing custom_command)
-    add_custom_command(
-      ${custom_command}
-      )
-
-    add_custom_target(
-      linker_app_sizing_script
-      DEPENDS
-      linker_app_sizing.cmd
-      ${OFFSETS_H_TARGET}
-      ${APP_SMEM_DEP}
-      ${CODE_RELOCATION_DEP}
+  add_custom_target(
+    ${APP_SMEM_DEP}
+    DEPENDS
+    ${APP_SMEM_LD}
     )
 
-    set_property(TARGET
-      linker_app_sizing_script
-      PROPERTY INCLUDE_DIRECTORIES
-      ${ZEPHYR_INCLUDE_DIRS}
-      )
-
-    # For systems with MPUs, the size of the application data section must
-    # be determined so that MPU alignment requirements can be met.
-    # Create a app_sizing_prebuilt target so we can do this before the
-    # other ELF files are built
-    set(GEN_APP_ALIGN $ENV{ZEPHYR_BASE}/scripts/gen_alignment_script.py)
-    add_executable(       app_sizing_prebuilt misc/empty_file.c)
-    target_link_libraries(app_sizing_prebuilt ${TOPT} ${PROJECT_BINARY_DIR}/linker_app_sizing.cmd ${zephyr_lnk} ${CODE_RELOCATION_DEP})
-    set_property(TARGET   app_sizing_prebuilt PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/linker_app_sizing.cmd)
-    add_dependencies(     app_sizing_prebuilt linker_app_sizing_script ${OFFSETS_LIB} ${CODE_RELOCATION_DEP} )
-
-    add_custom_command(
-      TARGET app_sizing_prebuilt
-      POST_BUILD
-      COMMAND ${PYTHON_EXECUTABLE} ${GEN_APP_ALIGN}
-      --output ./include/generated/app_data_alignment.ld
-      --kernel $<TARGET_FILE:app_sizing_prebuilt>
-      VERBATIM
-      WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/
-   )
+  if(CONFIG_NEWLIB_LIBC)
+    set(NEWLIB_PART -l libc.a z_newlib_partition)
   endif()
+  add_custom_command(
+    OUTPUT ${APP_SMEM_LD}
+    COMMAND ${PYTHON_EXECUTABLE}
+    ${ZEPHYR_BASE}/scripts/gen_app_partitions.py
+    -d ${OBJ_FILE_DIR}
+    -o ${APP_SMEM_LD}
+    ${NEWLIB_PART}
+    $<$<BOOL:${CMAKE_VERBOSE_MAKEFILE}>:--verbose>
+    DEPENDS
+    kernel
+    ${ZEPHYR_LIBS_PROPERTY}
+    WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/
+    COMMENT "Generating app_smem linker section"
+    )
+endif()
 
-if(CONFIG_ARM)
-  construct_add_custom_command_for_linker_pass(linker_priv_stacks custom_command)
+if(CONFIG_USERSPACE AND CONFIG_ARM)
+  construct_add_custom_command_for_linker_pass(
+    linker_priv_stacks
+    custom_command
+    ${ALIGN_SIZING_DEP}
+    ${CODE_RELOCATION_DEP}
+    ${APP_SMEM_DEP}
+    ${APP_SMEM_LD}
+    ${OFFSETS_H_TARGET}
+    )
   add_custom_command(
     ${custom_command}
     )
@@ -1247,10 +1177,7 @@ if(CONFIG_ARM)
   add_custom_target(
     linker_priv_stacks_script
     DEPENDS
-    ${ALIGN_SIZING_DEP} ${APP_SMEM_DEP}
-    ${CODE_RELOCATION_DEP}
     linker_priv_stacks.cmd
-    ${OFFSETS_H_TARGET}
     )
 
   set_property(TARGET
@@ -1264,8 +1191,6 @@ if(CONFIG_ARM)
   target_link_libraries(priv_stacks_prebuilt ${TOPT} ${PROJECT_BINARY_DIR}/linker_priv_stacks.cmd ${zephyr_lnk} ${CODE_RELOCATION_DEP})
   set_property(TARGET   priv_stacks_prebuilt PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/linker_priv_stacks.cmd)
   add_dependencies(     priv_stacks_prebuilt ${ALIGN_SIZING_DEP} linker_priv_stacks_script ${OFFSETS_LIB})
-endif()
-
 endif()
 
 # FIXME: Is there any way to get rid of empty_file.c?
@@ -1282,7 +1207,15 @@ if(GKOF OR GKSF)
   # The second linker pass uses the same source linker script of the
   # first pass (LINKER_SCRIPT), but this time with a different output
   # file and preprocessed with the define LINKER_PASS2.
-  construct_add_custom_command_for_linker_pass(linker_pass_final custom_command)
+  construct_add_custom_command_for_linker_pass(
+    linker_pass_final
+    custom_command
+    ${ALIGN_SIZING_DEP}
+    ${PRIV_STACK_DEP}
+    ${CODE_RELOCATION_DEP}
+    ${ZEPHYR_PREBUILT_EXECUTABLE}
+    ${OFFSETS_H_TARGET}
+    )
   add_custom_command(
     ${custom_command}
     )
@@ -1291,11 +1224,7 @@ if(GKOF OR GKSF)
   add_custom_target(
     ${LINKER_PASS_FINAL_SCRIPT_TARGET}
     DEPENDS
-    ${ALIGN_SIZING_DEP} ${PRIV_STACK_DEP}
-    ${CODE_RELOCATION_DEP}
-    ${ZEPHYR_PREBUILT_EXECUTABLE}
     linker_pass_final.cmd
-    ${OFFSETS_H_TARGET}
     )
   set_property(TARGET
     ${LINKER_PASS_FINAL_SCRIPT_TARGET}
@@ -1375,13 +1304,23 @@ list_append_ifdef(
   COMMAND ${CMAKE_COMMAND} -E copy ${KERNEL_ELF_NAME}    ${KERNEL_EXE_NAME}
   )
 
+get_property(extra_post_build_commands
+  GLOBAL PROPERTY
+  extra_post_build_commands
+  )
+
+list(APPEND
+  post_build_commands
+  ${extra_post_build_commands}
+  )
+
 add_custom_command(
   TARGET ${logical_target_for_zephyr_elf}
   POST_BUILD
   ${post_build_commands}
   COMMENT "Generating files from zephyr.elf for board: ${BOARD}"
   # NB: COMMENT only works for some CMake-Generators
-)
+  )
 
 # To populate with hex files to merge, do the following:
 #  set_property(GLOBAL APPEND PROPERTY HEX_FILES_TO_MERGE ${my_local_list})
@@ -1451,14 +1390,5 @@ if(CONFIG_BOARD_DEPRECATED)
   message(WARNING "
       WARNING:  The board '${BOARD}' is deprecated and will be
       removed in version ${CONFIG_BOARD_DEPRECATED}"
-  )
-endif()
-
-if(CONFIG_X86 AND CONFIG_USERSPACE AND NOT CONFIG_X86_NO_MELTDOWN)
-  message(WARNING "
-      WARNING: You have enabled CONFIG_USERSPACE on an x86-based target.
-      If your CPU is vulnerable to the Meltdown CPU bug, security of
-      supervisor-only memory pages is not guaranteed. This version of Zephyr
-      does not contain a fix for this issue."
   )
 endif()

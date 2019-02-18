@@ -30,6 +30,10 @@
  */
 #include <kernel_includes.h>
 
+#ifdef CONFIG_EXTI_STM32
+#include <stm32l4xx_ll_exti.h>
+#endif
+
 #ifdef CONFIG_GPIO_STM32
 /* Required to enable VDDio2 for port G */
 #include <stm32l4xx_ll_pwr.h>
@@ -64,7 +68,7 @@
 #include <stm32l4xx_ll_rng.h>
 #endif
 
-#ifdef CONFIG_RTC_STM32
+#if defined(CONFIG_RTC_STM32) || defined(CONFIG_COUNTER_RTC_STM32)
 #include <stm32l4xx_ll_rtc.h>
 #include <stm32l4xx_ll_exti.h>
 #include <stm32l4xx_ll_pwr.h>

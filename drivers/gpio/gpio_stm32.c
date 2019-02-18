@@ -240,6 +240,11 @@ static int gpio_stm32_config(struct device *dev, int access_op,
 		return -ENOTSUP;
 	}
 
+	if ((flags & GPIO_POL_MASK) == GPIO_POL_INV) {
+		/* hardware cannot invert signal */
+		return -ENOTSUP;
+	}
+
 	/* figure out if we can map the requested GPIO
 	 * configuration
 	 */
@@ -274,6 +279,9 @@ static int gpio_stm32_config(struct device *dev, int access_op,
 			}
 
 			stm32_exti_trigger(pin, edge);
+		} else {
+			/* Level trigger interrupts not supported */
+			return -ENOTSUP;
 		}
 
 		if (stm32_exti_enable(pin) != 0) {
@@ -332,9 +340,7 @@ static int gpio_stm32_manage_callback(struct device *dev,
 {
 	struct gpio_stm32_data *data = dev->driver_data;
 
-	_gpio_manage_callback(&data->cb, callback, set);
-
-	return 0;
+	return _gpio_manage_callback(&data->cb, callback, set);
 }
 
 static int gpio_stm32_enable_callback(struct device *dev,

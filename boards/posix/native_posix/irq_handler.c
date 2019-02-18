@@ -57,6 +57,8 @@ static inline void vector_to_irq(int irq_nbr, int *may_swap)
 			*may_swap = 1;
 		}
 	}
+
+	sys_trace_isr_exit();
 	/* _int_latency_stop(); */
 }
 
@@ -112,7 +114,7 @@ void posix_irq_handler(void)
 		&& (hw_irq_ctrl_get_cur_prio() == 256)
 		&& (_kernel.ready_q.cache != _current)) {
 
-		(void)_Swap(irq_lock);
+		(void)_Swap_irqlock(irq_lock);
 	}
 }
 

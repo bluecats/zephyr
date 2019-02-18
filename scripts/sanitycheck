@@ -87,6 +87,8 @@ pairs:
     { ARCH : <architecture>,
       PLATFORM : <platform>,
       <all CONFIG_* key/value pairs in the test's generated defconfig>,
+      <all DT_* key/value pairs in the test's generated device tree file>,
+      <all CMake key/value pairs in the test's generated CMakeCache.txt file>,
       *<env>: any environment variable available
     }
 
@@ -228,6 +230,161 @@ else:
     COLOR_RED = ""
     COLOR_GREEN = ""
     COLOR_YELLOW = ""
+
+class CMakeCacheEntry:
+    '''Represents a CMake cache entry.
+
+    This class understands the type system in a CMakeCache.txt, and
+    converts the following cache types to Python types:
+
+    Cache Type    Python type
+    ----------    -------------------------------------------
+    FILEPATH      str
+    PATH          str
+    STRING        str OR list of str (if ';' is in the value)
+    BOOL          bool
+    INTERNAL      str OR list of str (if ';' is in the value)
+    ----------    -------------------------------------------
+    '''
+
+    # Regular expression for a cache entry.
+    #
+    # CMake variable names can include escape characters, allowing a
+    # wider set of names than is easy to match with a regular
+    # expression. To be permissive here, use a non-greedy match up to
+    # the first colon (':'). This breaks if the variable name has a
+    # colon inside, but it's good enough.
+    CACHE_ENTRY = re.compile(
+        r'''(?P<name>.*?)                               # name
+         :(?P<type>FILEPATH|PATH|STRING|BOOL|INTERNAL)  # type
+         =(?P<value>.*)                                 # value
+        ''', re.X)
+
+    @classmethod
+    def _to_bool(cls, val):
+        # Convert a CMake BOOL string into a Python bool.
+        #
+        #   "True if the constant is 1, ON, YES, TRUE, Y, or a
+        #   non-zero number. False if the constant is 0, OFF, NO,
+        #   FALSE, N, IGNORE, NOTFOUND, the empty string, or ends in
+        #   the suffix -NOTFOUND. Named boolean constants are
+        #   case-insensitive. If the argument is not one of these
+        #   constants, it is treated as a variable."
+        #
+        # https://cmake.org/cmake/help/v3.0/command/if.html
+        val = val.upper()
+        if val in ('ON', 'YES', 'TRUE', 'Y'):
+            return 1
+        elif val in ('OFF', 'NO', 'FALSE', 'N', 'IGNORE', 'NOTFOUND', ''):
+            return 0
+        elif val.endswith('-NOTFOUND'):
+            return 0
+        else:
+            try:
+                v = int(val)
+                return v != 0
+            except ValueError as exc:
+                raise ValueError('invalid bool {}'.format(val)) from exc
+
+    @classmethod
+    def from_line(cls, line, line_no):
+        # Comments can only occur at the beginning of a line.
+        # (The value of an entry could contain a comment character).
+        if line.startswith('//') or line.startswith('#'):
+            return None
+
+        # Whitespace-only lines do not contain cache entries.
+        if not line.strip():
+            return None
+
+        m = cls.CACHE_ENTRY.match(line)
+        if not m:
+            return None
+
+        name, type_, value = (m.group(g) for g in ('name', 'type', 'value'))
+        if type_ == 'BOOL':
+            try:
+                value = cls._to_bool(value)
+            except ValueError as exc:
+                args = exc.args + ('on line {}: {}'.format(line_no, line),)
+                raise ValueError(args) from exc
+        elif type_ == 'STRING' or type_ == 'INTERNAL':
+            # If the value is a CMake list (i.e. is a string which
+            # contains a ';'), convert to a Python list.
+            if ';' in value:
+                value = value.split(';')
+
+        return CMakeCacheEntry(name, value)
+
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value
+
+    def __str__(self):
+        fmt = 'CMakeCacheEntry(name={}, value={})'
+        return fmt.format(self.name, self.value)
+
+
+class CMakeCache:
+    '''Parses and represents a CMake cache file.'''
+
+    @staticmethod
+    def from_file(cache_file):
+        return CMakeCache(cache_file)
+
+    def __init__(self, cache_file):
+        self.cache_file = cache_file
+        self.load(cache_file)
+
+    def load(self, cache_file):
+        entries = []
+        with open(cache_file, 'r') as cache:
+            for line_no, line in enumerate(cache):
+                entry = CMakeCacheEntry.from_line(line, line_no)
+                if entry:
+                    entries.append(entry)
+        self._entries = OrderedDict((e.name, e) for e in entries)
+
+    def get(self, name, default=None):
+        entry = self._entries.get(name)
+        if entry is not None:
+            return entry.value
+        else:
+            return default
+
+    def get_list(self, name, default=None):
+        if default is None:
+            default = []
+        entry = self._entries.get(name)
+        if entry is not None:
+            value = entry.value
+            if isinstance(value, list):
+                return value
+            elif isinstance(value, str):
+                return [value] if value else []
+            else:
+                msg = 'invalid value {} type {}'
+                raise RuntimeError(msg.format(value, type(value)))
+        else:
+            return default
+
+    def __contains__(self, name):
+        return name in self._entries
+
+    def __getitem__(self, name):
+        return self._entries[name].value
+
+    def __setitem__(self, name, entry):
+        if not isinstance(entry, CMakeCacheEntry):
+            msg = 'improper type {} for value {}, expecting CMakeCacheEntry'
+            raise TypeError(msg.format(type(entry), entry))
+        self._entries[name] = entry
+
+    def __delitem__(self, name):
+        del self._entries[name]
+
+    def __iter__(self):
+        return iter(self._entries.values())
 
 class SanityCheckException(Exception):
     pass
@@ -446,15 +603,30 @@ class DeviceHandler(Handler):
         """
         super().__init__(instance)
 
-    def monitor_serial(self, ser, harness):
+    def monitor_serial(self, ser, halt_fileno, harness):
         log_out_fp = open(self.log, "wt")
 
+        ser_fileno = ser.fileno()
+        readlist = [halt_fileno, ser_fileno]
+
         while ser.isOpen():
+            readable, _, _ = select.select(readlist, [], [], self.timeout)
+
+            if halt_fileno in readable:
+                verbose('halted')
+                ser.close()
+                break
+            if ser_fileno not in readable:
+                continue        # Timeout.
+
+            serial_line = None
             try:
                 serial_line = ser.readline()
             except TypeError:
                 pass
 
+            # Just because ser_fileno has data doesn't mean an entire line
+            # is available yet.
             if serial_line:
                 sl = serial_line.decode('utf-8', 'ignore')
                 verbose("DEVICE: {0}".format(sl.rstrip()))
@@ -462,6 +634,7 @@ class DeviceHandler(Handler):
                 log_out_fp.write(sl)
                 log_out_fp.flush()
                 harness.handle(sl.rstrip())
+
             if harness.state:
                 ser.close()
                 break
@@ -494,19 +667,23 @@ class DeviceHandler(Handler):
         harness_import = HarnessImporter(harness_name)
         harness = harness_import.instance
         harness.configure(self.instance)
+        rpipe, wpipe = os.pipe()
 
-        t = threading.Thread(target=self.monitor_serial, args=(ser, harness))
+        t = threading.Thread(target=self.monitor_serial, daemon=True,
+                             args=(ser, rpipe, harness))
         t.start()
 
         try:
-            subprocess.check_output(command, stderr=subprocess.PIPE)
+            if VERBOSE:
+                subprocess.check_call(command)
+            else:
+                subprocess.check_output(command, stderr=subprocess.PIPE)
         except subprocess.CalledProcessError:
-            pass
+            os.write(wpipe, b'x')    # halt the thread
 
         t.join(self.timeout)
         if t.is_alive():
             out_state = "timeout"
-            ser.close()
 
         if ser.isOpen():
             ser.close()
@@ -601,12 +778,11 @@ class QEMUHandler(Handler):
                 # if we get some state, that means test is doing well, we reset
                 # the timeout and wait for 2 more seconds just in case we have
                 # crashed after test has completed
-
-                if harness.type:
-                    break
-                else:
-                    if not timeout_extended:
-                        timeout_extended= True
+                if not timeout_extended or harness.capture_coverage:
+                    timeout_extended= True
+                    if harness.capture_coverage:
+                        timeout_time = time.time() + 10
+                    else:
                         timeout_time = time.time() + 2
 
             # TODO: Add support for getting numerical performance data
@@ -680,7 +856,7 @@ class SizeCalculator:
                    "_k_memory_pool", "exceptions", "initshell",
                    "_static_thread_area", "_k_timer_area",
                    "_k_mem_slab_area", "_k_mem_pool_area", "sw_isr_table",
-                   "_k_sem_area", "_k_mutex_area",
+                   "_k_sem_area", "_k_mutex_area", "app_shmem_regions",
                    "_k_fifo_area", "_k_lifo_area", "_k_stack_area",
                    "_k_msgq_area", "_k_mbox_area", "_k_pipe_area",
                    "net_if", "net_if_dev", "net_stack", "net_l2_data",
@@ -691,7 +867,7 @@ class SizeCalculator:
                    'log_const_sections',"app_smem", 'shell_root_cmds_sections',
                    'log_const_sections',"app_smem", "font_entry_sections",
                    "priv_stacks_noinit", "_TEXT_SECTION_NAME_2",
-                   '_GCOV_BSS_SECTION_NAME', 'gcov']
+                   '_GCOV_BSS_SECTION_NAME', 'gcov', 'nocache']
 
     # These get copied into RAM only on non-XIP
     ro_sections = ["text", "ctors", "init_array", "reset", "object_access",
@@ -1040,12 +1216,16 @@ class MakeGenerator:
         elif type == "native":
             handler = BinaryHandler(instance)
             handler.binary = os.path.join(outdir, "zephyr", "zephyr.exe")
+            if options.enable_coverage:
+                args += ["EXTRA_LDFLAGS=--coverage"]
         elif type == "nsim":
             handler = BinaryHandler(instance)
             handler.call_make_run = True
         elif type == "unit":
             handler = BinaryHandler(instance)
             handler.binary = os.path.join(outdir, "testbinary")
+            if options.enable_coverage:
+                args += ["EXTRA_LDFLAGS=--coverage"]
         elif type == "device":
             handler = DeviceHandler(instance)
         elif type == "renode":
@@ -1053,8 +1233,6 @@ class MakeGenerator:
             handler.pid_fn = os.path.join(instance.outdir, "renode.pid")
             handler.call_make_run = True
 
-        if options.enable_coverage:
-            args += ["EXTRA_LDFLAGS=--coverage"]
 
         if type == 'qemu':
             args.append("QEMU_PIPE=%s" % handler.get_fifo())
@@ -1487,6 +1665,7 @@ class TestCase:
 
         self.defconfig = {}
         self.dt_config = {}
+        self.cmake_cache = {}
         self.yamlfile = yamlfile
 
 
@@ -1845,6 +2024,7 @@ class TestSuite:
         mg = MakeGenerator(self.outdir)
         defconfig_list = {}
         dt_list = {}
+        cmake_list = {}
         for tc_name, tc in self.testcases.items():
             for arch_name, arch in self.arches.items():
                 for plat in arch.platforms:
@@ -1924,9 +2104,11 @@ class TestSuite:
                         # simultaneously
 
                         o = os.path.join(self.outdir, plat.name, tc.name)
+                        cmake_cache_path = os.path.join(o, "CMakeCache.txt")
                         generated_dt_confg = "include/generated/generated_dts_board.conf"
                         dt_config_path = os.path.join(o, "zephyr", generated_dt_confg)
                         dt_list[tc, plat, tc.name.split("/")[-1]] = dt_config_path
+                        cmake_list[tc, plat, tc.name.split("/")[-1]] = cmake_cache_path
                         defconfig_list[tc, plat, tc.name.split("/")[-1]] = os.path.join(o, "zephyr", ".config")
                         goal = "_".join([plat.name, "_".join(tc.name.split("/")), "config-sanitycheck"])
                         mg.add_build_goal(goal, os.path.join(ZEPHYR_BASE, tc.test_path),
@@ -1956,6 +2138,22 @@ class TestSuite:
                         continue
                     defconfig[m.group(1)] = m.group(2).strip()
             test.defconfig[plat] = defconfig
+
+        for k, cache_file in cmake_list.items():
+            if not os.path.exists(out_config):
+                continue
+
+            test, plat, name = k
+            cmake_conf = {}
+            try:
+                cache = CMakeCache.from_file(cache_file)
+            except FileNotFoundError:
+                cache = {}
+
+            for k in iter(cache):
+                cmake_conf[k.name] = k.value
+
+            test.cmake_cache[plat] = cmake_conf
 
         for k, out_config in dt_list.items():
             if not os.path.exists(out_config):
@@ -2078,6 +2276,11 @@ class TestSuite:
                             break
 
                     for p, tdefconfig in tc.dt_config.items():
+                        if p == plat:
+                            defconfig.update(tdefconfig)
+                            break
+
+                    for p, tdefconfig in tc.cmake_cache.items():
                         if p == plat:
                             defconfig.update(tdefconfig)
                             break
@@ -2381,11 +2584,16 @@ class TestSuite:
                     message=goal.reason)
                 p = ("%s/%s/%s" % (options.outdir, i.platform.name, i.test.name))
                 bl = os.path.join(p, "build.log")
+                hl = os.path.join(p, "handler.log")
+                log_file = bl
                 if goal.reason != 'build_error':
-                    bl = os.path.join(p, "handler.log")
+                    if os.path.exists(hl):
+                        log_file = hl
+                    else:
+                        log_file = bl
 
-                if os.path.exists(bl):
-                    with open(bl, "rb") as f:
+                if os.path.exists(log_file):
+                    with open(log_file, "rb") as f:
                         log = f.read().decode("utf-8")
                         filtered_string = ''.join(filter(lambda x: x in string.printable, log))
                         failure.text = filtered_string
@@ -2675,6 +2883,8 @@ def parse_arguments():
         which will ultimately disable ccache.
         """
     )
+    parser.add_argument("--gcov-tool", default="gcov",
+                        help="Path to the gcov tool. Default is gcov in the path.")
 
     parser.add_argument("--enable-coverage", action="store_true",
                         help="Enable code coverage using gcov.")
@@ -2783,18 +2993,19 @@ def size_report(sc):
          (sc.rom_size, sc.ram_size))
     info("")
 
-def retrieve_data(intput_file):
+def retrieve_gcov_data(intput_file):
     if VERBOSE:
         print("Working on %s" %intput_file)
     extracted_coverage_info = {}
     capture_data = False
+    capture_complete = False
     with open(intput_file, 'r') as fp:
         for line in fp.readlines():
             if re.search("GCOV_COVERAGE_DUMP_START", line):
                 capture_data = True
                 continue
             if re.search("GCOV_COVERAGE_DUMP_END", line):
-                capture_data = True
+                capture_complete = True
                 break
             # Loop until the coverage data is found.
             if not capture_data:
@@ -2811,7 +3022,9 @@ def retrieve_data(intput_file):
             else:
                 continue
             extracted_coverage_info.update({file_name:hex_dump})
-    return extracted_coverage_info
+    if not capture_data:
+        capture_complete = True
+    return {'complete': capture_complete, 'data': extracted_coverage_info}
 
 def create_gcda_files(extracted_coverage_info):
     if VERBOSE:
@@ -2833,23 +3046,32 @@ def create_gcda_files(extracted_coverage_info):
 def generate_coverage(outdir, ignores):
 
     for filename in glob.glob("%s/**/handler.log" %outdir, recursive=True):
-        extracted_coverage_info = retrieve_data(filename)
-        create_gcda_files(extracted_coverage_info)
+        gcov_data = retrieve_gcov_data(filename)
+        capture_complete = gcov_data['complete']
+        extracted_coverage_info = gcov_data['data']
+        if capture_complete:
+            create_gcda_files(extracted_coverage_info)
+            verbose("Gcov data captured: {}".format(filename))
+        else:
+            error("Gcov data capture incomplete: {}".format(filename))
+
+    gcov_tool = options.gcov_tool
 
     with open(os.path.join(outdir, "coverage.log"), "a") as coveragelog:
         coveragefile = os.path.join(outdir, "coverage.info")
         ztestfile = os.path.join(outdir, "ztest.info")
-        subprocess.call(["lcov", "--capture", "--directory", outdir,
-                         "--rc", "lcov_branch_coverage=1",
-                         "--output-file", coveragefile], stdout=coveragelog)
+        subprocess.call(["lcov", "--gcov-tool", gcov_tool,
+                            "--capture", "--directory", outdir,
+                            "--rc", "lcov_branch_coverage=1",
+                            "--output-file", coveragefile], stdout=coveragelog)
         # We want to remove tests/* and tests/ztest/test/* but save tests/ztest
-        subprocess.call(["lcov", "--extract", coveragefile,
+        subprocess.call(["lcov", "--gcov-tool", gcov_tool, "--extract", coveragefile,
                          os.path.join(ZEPHYR_BASE, "tests", "ztest", "*"),
                          "--output-file", ztestfile,
                          "--rc", "lcov_branch_coverage=1"], stdout=coveragelog)
 
         if os.path.exists(ztestfile) and os.path.getsize(ztestfile) > 0:
-            subprocess.call(["lcov", "--remove", ztestfile,
+            subprocess.call(["lcov", "--gcov-tool", gcov_tool, "--remove", ztestfile,
                              os.path.join(ZEPHYR_BASE, "tests/ztest/test/*"),
                              "--output-file", ztestfile,
                              "--rc", "lcov_branch_coverage=1"],
@@ -2860,11 +3082,15 @@ def generate_coverage(outdir, ignores):
 
         for i in ignores:
             subprocess.call(
-                ["lcov", "--remove", coveragefile, i, "--output-file",
-                 coveragefile, "--rc", "lcov_branch_coverage=1"],
+                ["lcov", "--gcov-tool", gcov_tool, "--remove",
+                    coveragefile, i, "--output-file",
+                    coveragefile, "--rc", "lcov_branch_coverage=1"],
                 stdout=coveragelog)
 
+        #The --ignore-errors source option is added to avoid it exiting due to
+        #samples/application_development/external_lib/
         ret = subprocess.call(["genhtml", "--legend", "--branch-coverage",
+                               "--ignore-errors", "source",
                                "-output-directory",
                                os.path.join(outdir, "coverage")] + files,
                                stdout=coveragelog)

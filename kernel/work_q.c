@@ -13,6 +13,7 @@
 
 #include <kernel_structs.h>
 #include <wait_q.h>
+#include <spinlock.h>
 #include <errno.h>
 #include <stdbool.h>
 
@@ -47,60 +48,13 @@ void k_delayed_work_init(struct k_delayed_work *work, k_work_handler_t handler)
 	work->work_q = NULL;
 }
 
-int k_delayed_work_submit_to_queue(struct k_work_q *work_q,
-				   struct k_delayed_work *work,
-				   s32_t delay)
+static int work_cancel(struct k_delayed_work *work)
 {
-	unsigned int key = irq_lock();
-	int err;
-
-	/* Work cannot be active in multiple queues */
-	if (work->work_q && work->work_q != work_q) {
-		err = -EADDRINUSE;
-		goto done;
-	}
-
-	/* Cancel if work has been submitted */
-	if (work->work_q == work_q) {
-		err = k_delayed_work_cancel(work);
-		if (err < 0) {
-			goto done;
-		}
-	}
-
-	/* Attach workqueue so the timeout callback can submit it */
-	work->work_q = work_q;
-
-	if (!delay) {
-		/* Submit work if no ticks is 0 */
-		k_work_submit_to_queue(work_q, &work->work);
-	} else {
-		/* Add timeout */
-		_add_timeout(&work->timeout, work_timeout,
-			     _TICK_ALIGN + _ms_to_ticks(delay));
-	}
-
-	err = 0;
-
-done:
-	irq_unlock(key);
-
-	return err;
-}
-
-int k_delayed_work_cancel(struct k_delayed_work *work)
-{
-	unsigned int key = irq_lock();
-
-	if (!work->work_q) {
-		irq_unlock(key);
-		return -EINVAL;
-	}
+	__ASSERT(work->work_q != NULL, "");
 
 	if (k_work_pending(&work->work)) {
 		/* Remove from the queue if already submitted */
 		if (!k_queue_remove(&work->work_q->queue, &work->work)) {
-			irq_unlock(key);
 			return -EINVAL;
 		}
 	} else {
@@ -111,8 +65,64 @@ int k_delayed_work_cancel(struct k_delayed_work *work)
 	work->work_q = NULL;
 
 	atomic_clear_bit(work->work.flags, K_WORK_STATE_PENDING);
-	irq_unlock(key);
 
 	return 0;
 }
+
+int k_delayed_work_submit_to_queue(struct k_work_q *work_q,
+				   struct k_delayed_work *work,
+				   s32_t delay)
+{
+	k_spinlock_key_t key = k_spin_lock(&work_q->lock);
+	int err = 0;
+
+	/* Work cannot be active in multiple queues */
+	if (work->work_q && work->work_q != work_q) {
+		err = -EADDRINUSE;
+		goto done;
+	}
+
+	/* Cancel if work has been submitted */
+	if (work->work_q == work_q) {
+		err = work_cancel(work);
+		if (err < 0) {
+			goto done;
+		}
+	}
+
+	/* Attach workqueue so the timeout callback can submit it */
+	work->work_q = work_q;
+
+	/* Submit work directly if no delay.  Note that this is a
+	 * blocking operation, so release the lock first.
+	 */
+	if (!delay) {
+		k_spin_unlock(&work_q->lock, key);
+		k_work_submit_to_queue(work_q, &work->work);
+		return 0;
+	}
+
+	/* Add timeout */
+	_add_timeout(&work->timeout, work_timeout,
+		     _TICK_ALIGN + _ms_to_ticks(delay));
+
+done:
+	k_spin_unlock(&work_q->lock, key);
+	return err;
+}
+
+int k_delayed_work_cancel(struct k_delayed_work *work)
+{
+	if (!work->work_q) {
+		return -EINVAL;
+	}
+
+	struct k_spinlock *lock = &work->work_q->lock;
+	k_spinlock_key_t key = k_spin_lock(lock);
+	int ret = work_cancel(work);
+
+	k_spin_unlock(lock, key);
+	return ret;
+}
+
 #endif /* CONFIG_SYS_CLOCK_EXISTS */

@@ -134,6 +134,16 @@ static inline void flag_history_exit_set(const struct shell *shell, bool val)
 	shell->ctx->internal.flags.history_exit = val ? 1 : 0;
 }
 
+static inline bool flag_cmd_ctx_get(const struct shell *shell)
+{
+	return shell->ctx->internal.flags.cmd_ctx == 1 ? true : false;
+}
+
+static inline void flag_cmd_ctx_set(const struct shell *shell, bool val)
+{
+	shell->ctx->internal.flags.cmd_ctx = val ? 1 : 0;
+}
+
 static inline u8_t flag_last_nl_get(const struct shell *shell)
 {
 	return shell->ctx->internal.flags.last_nl;
@@ -181,8 +191,6 @@ void shell_op_cursor_home_move(const struct shell *shell);
 /* Function moves cursor to end of command. */
 void shell_op_cursor_end_move(const struct shell *shell);
 
-void char_replace(const struct shell *shell, char data);
-
 void shell_op_char_insert(const struct shell *shell, char data);
 
 void shell_op_char_backspace(const struct shell *shell);
@@ -198,6 +206,20 @@ void shell_op_completion_insert(const struct shell *shell,
 bool shell_cursor_in_empty_line(const struct shell *shell);
 
 void shell_cmd_line_erase(const struct shell *shell);
+
+/**
+ * @brief Print command buffer.
+ *
+ * @param shell Shell instance.
+ */
+void shell_print_cmd(const struct shell *shell);
+
+/**
+ * @brief Print prompt followed by command buffer.
+ *
+ * @param shell Shell instance.
+ */
+void shell_print_prompt_and_cmd(const struct shell *shell);
 
 /* Function sends data stream to the shell instance. Each time before the
  * shell_write function is called, it must be ensured that IO buffer of fprintf
@@ -233,6 +255,17 @@ static inline void shell_vt100_colors_store(const struct shell *shell,
 
 void shell_vt100_colors_restore(const struct shell *shell,
 				const struct shell_vt100_colors *color);
+
+/* This function can be called only within shell thread but not from command
+ * handlers.
+ */
+void shell_internal_fprintf(const struct shell *shell,
+			    enum shell_vt100_color color,
+			    const char *fmt, ...);
+
+void shell_internal_vfprintf(const struct shell *shell,
+			     enum shell_vt100_color color, const char *fmt,
+			     va_list args);
 
 #ifdef __cplusplus
 }

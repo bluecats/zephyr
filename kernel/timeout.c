@@ -62,7 +62,7 @@ static s32_t next_timeout(void)
 {
 	int maxw = can_wait_forever ? K_FOREVER : INT_MAX;
 	struct _timeout *to = first();
-	s32_t ret = to == NULL ? maxw : max(0, to->dticks - elapsed());
+	s32_t ret = to == NULL ? maxw : MAX(0, to->dticks - elapsed());
 
 #ifdef CONFIG_TIMESLICING
 	if (_current_cpu->slice_ticks && _current_cpu->slice_ticks < ret) {
@@ -76,7 +76,7 @@ void _add_timeout(struct _timeout *to, _timeout_func_t fn, s32_t ticks)
 {
 	__ASSERT(!sys_dnode_is_linked(&to->node), "");
 	to->fn = fn;
-	ticks = max(1, ticks);
+	ticks = MAX(1, ticks);
 
 	LOCKED(&timeout_lock) {
 		struct _timeout *t;
@@ -87,8 +87,7 @@ void _add_timeout(struct _timeout *to, _timeout_func_t fn, s32_t ticks)
 
 			if (t->dticks > to->dticks) {
 				t->dticks -= to->dticks;
-				sys_dlist_insert_before(&timeout_list,
-							&t->node, &to->node);
+				sys_dlist_insert(&t->node, &to->node);
 				break;
 			}
 			to->dticks -= t->dticks;
@@ -198,7 +197,7 @@ void z_clock_announce(s32_t ticks)
 	curr_tick += announce_remaining;
 	announce_remaining = 0;
 
-	z_clock_set_timeout(_get_next_timeout_expiry(), false);
+	z_clock_set_timeout(next_timeout(), false);
 
 	k_spin_unlock(&timeout_lock, key);
 }
