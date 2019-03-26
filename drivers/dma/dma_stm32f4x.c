@@ -226,9 +226,6 @@ static void dma_stm32_irq_clear(struct dma_stm32_device *ddata,
 	}
 }
 
-void do_toggle_pin_on(void);
-void do_toggle_pin_off(void);
-
 static void dma_stm32_irq_handler(void *arg, u32_t id)
 {
 	struct device *dev = arg;
@@ -236,11 +233,11 @@ static void dma_stm32_irq_handler(void *arg, u32_t id)
 	struct dma_stm32_stream *stream = &ddata->stream[id];
 	u32_t irqstatus, config, sfcr;	
 
-	do_toggle_pin_on();
-
 	irqstatus = dma_stm32_irq_status(ddata, id);
 	config = dma_stm32_read(ddata, DMA_STM32_SCR(id));
 	sfcr = dma_stm32_read(ddata, DMA_STM32_SFCR(id));
+
+
 
 	/* Silently ignore spurious transfer half complete IRQ */
 	if (irqstatus & DMA_STM32_HTI) {
@@ -252,17 +249,15 @@ static void dma_stm32_irq_handler(void *arg, u32_t id)
 
 	if ((irqstatus & DMA_STM32_TCI) && (config & DMA_STM32_SCR_TCIE)) {
 		dma_stm32_irq_clear(ddata, id, DMA_STM32_TCI);
-		if(stream->dma_callback && stream->complete_callback_en)
+		if(stream->dma_callback /* && stream->complete_callback_en */) {
 			stream->dma_callback(stream->callback_arg, id, 0);
+		}
 	} else {
 		LOG_ERR("Error on stream %d: IRQ status: 0x%x", id, irqstatus);
 		dma_stm32_irq_clear(ddata, id, irqstatus);
 		if(stream->dma_callback && stream->error_callback_en)
 			stream->dma_callback(stream->callback_arg, id, -EIO);
 	}
-
-	do_toggle_pin_off();
-
 }
 
 static int dma_stm32_disable_stream(struct dma_stm32_device *ddata,
@@ -473,6 +468,7 @@ static int dma_stm32_start(struct device *dev, u32_t id)
 
 	ret = dma_stm32_disable_stream(ddata, id);
 	if (ret) {
+		LOG_ERR("Disabling stream: %d at dma_start failed\n", id);
 		return ret;
 	}
 
