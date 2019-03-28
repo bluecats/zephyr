@@ -18,7 +18,7 @@ typedef void (*irq_config_func_t)(struct device *port);
 struct spi_stm32_config {
 	struct stm32_pclken pclken;
 	SPI_TypeDef *spi;
-#ifdef CONFIG_SPI_STM32_INTERRUPT
+#if defined(CONFIG_SPI_STM32_INTERRUPT) || defined(CONFIG_SPI_STM32_DMA)
 	irq_config_func_t irq_config;
 #endif
 #ifdef CONFIG_SPI_STM32_DMA
