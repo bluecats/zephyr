@@ -118,12 +118,12 @@ void assert_post_action(const char *file, unsigned int line);
 #else
 #define __ASSERT(test, fmt, ...) { }
 #define __ASSERT_EVAL(expr1, expr2, test, fmt, ...) expr1
-#define __ASSERT_NO_MSG(test) { }
+#define __ASSERT_NO_MSG(test) { ARG_UNUSED(test); }
 #endif
 #else
 #define __ASSERT(test, fmt, ...) { }
 #define __ASSERT_EVAL(expr1, expr2, test, fmt, ...) expr1
-#define __ASSERT_NO_MSG(test) { }
+#define __ASSERT_NO_MSG(test) { ARG_UNUSED(test); }
 #endif
 
 #endif /* ZEPHYR_INCLUDE_MISC___ASSERT_H_ */
