@@ -167,6 +167,18 @@ config CUSTOM_SECTIONS_LD
 	  Include a customized linker script fragment for inserting additional
 	  arbitrary sections.
 
+config HAVE_CUSTOM_LD_DIRECTORY
+	bool "Custom linker include directory provided"
+	help
+	  Set this option if you have a custom linker script which needed to
+	  be define in CUSTOM_LINKER_SCRIPT.
+
+config CUSTOM_LD_DIRECTORY
+	string "Include directory for linker files"
+	depends on HAVE_CUSTOM_LD_DIRECTORY
+	help
+	  directory to find the custom linker scripts
+
 config LINK_WHOLE_ARCHIVE
 	bool "Allow linking with --whole-archive"
 	help

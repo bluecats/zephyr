@@ -448,6 +448,15 @@ if(CONFIG_CUSTOM_RODATA_LD OR CONFIG_CUSTOM_RWDATA_LD OR CONFIG_CUSTOM_SECTIONS_
   zephyr_include_directories(${APPLICATION_SOURCE_DIR})
 endif()
 
+if(CONFIG_HAVE_CUSTOM_LD_DIRECTORY)
+	if(IS_ABSOLUTE ${CONFIG_CUSTOM_LD_DIRECTORY})
+      zephyr_include_directories(${CONFIG_CUSTOM_LD_DIRECTORY})
+    else()
+      zephyr_include_directories(${APPLICATION_SOURCE_DIR}/${CONFIG_CUSTOM_LD_DIRECTORY})
+    endif()
+  zephyr_include_directories(${APPLICATION_SOURCE_DIR}/../../lib)
+endif()
+
 configure_file(version.h.in ${PROJECT_BINARY_DIR}/include/generated/version.h)
 
 function(construct_add_custom_command_for_linker_pass linker_output_name output_variable)
