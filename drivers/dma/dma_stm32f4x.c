@@ -485,7 +485,7 @@ static int dma_stm32_start(struct device *dev, u32_t id)
 		dma_stm32_irq_clear(ddata, id, irqstatus);
 	}
 
-	dma_stm32_dump_reg(ddata, id);
+	//dma_stm32_dump_reg(ddata, id);
 
 	/* Push the start button */
 	irq_enable(cdata->irqn[id]);
