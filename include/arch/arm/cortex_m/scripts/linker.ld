@@ -450,6 +450,12 @@ SECTIONS
 
 	} GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)
 
+
+#ifdef CONFIG_CUSTOM_SECTIONS_LD
+/* Located in project source directory */
+#include <custom-sections.ld>
+#endif
+
     __data_rom_start = LOADADDR(_DATA_SECTION_NAME);
 
 #include <linker/common-ram.ld>
@@ -509,11 +515,6 @@ SECTIONS
     GROUP_END(CCM)
 
 #endif /* DT_CCM_BASE_ADDRESS */
-
-#ifdef CONFIG_CUSTOM_SECTIONS_LD
-/* Located in project source directory */
-#include <custom-sections.ld>
-#endif
 
 #ifdef CONFIG_GEN_ISR_TABLES
 #include <linker/intlist.ld>
