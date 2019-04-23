@@ -1061,7 +1061,7 @@ static struct spi_stm32_data spi_stm32_dev_data_4 = {
 	.b[RX_STREAM].dest_addr_adj = DMA_ADDR_ADJ_NO_CHANGE,
 
 	/* Setup for transmit stream */
-	.dma_conf[TX_STREAM].dma_slot = 0,
+	.dma_conf[TX_STREAM].dma_slot = 4,
 	.dma_conf[TX_STREAM].channel_direction = MEMORY_TO_PERIPHERAL,
 	.dma_conf[TX_STREAM].source_data_size = 0,      /* 8 bit data */
 	.dma_conf[TX_STREAM].dest_data_size = 0,        /* 8 bit data */
@@ -1140,7 +1140,7 @@ static struct spi_stm32_data spi_stm32_dev_data_5 = {
 	.b[RX_STREAM].dest_addr_adj = DMA_ADDR_ADJ_NO_CHANGE,
 
 	/* Setup for transmit stream */
-	.dma_conf[TX_STREAM].dma_slot = 0,
+	.dma_conf[TX_STREAM].dma_slot = 7,
 	.dma_conf[TX_STREAM].channel_direction = MEMORY_TO_PERIPHERAL,
 	.dma_conf[TX_STREAM].source_data_size = 0,      /* 8 bit data */
 	.dma_conf[TX_STREAM].dest_data_size = 0,        /* 8 bit data */
