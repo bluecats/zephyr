@@ -1042,7 +1042,7 @@ static const  struct spi_stm32_config spi_stm32_cfg_4 = {
 #ifdef CONFIG_SPI_STM32_DMA
 	.stream[TX_STREAM] = 1,
 	.stream[RX_STREAM] = 0,
-	.dmadev = CONFIG_DMA_4_NAME,
+	.dmadev = CONFIG_DMA_2_NAME,
 #endif
 };
 
