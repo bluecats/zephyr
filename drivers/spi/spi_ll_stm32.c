@@ -194,7 +194,7 @@ static int spi_stm32_shift_frames(SPI_TypeDef *spi, struct spi_stm32_data *data)
 }
 #endif
 
-static void spi_stm32_complete(struct spi_stm32_data *data, SPI_TypeDef *spi,
+static void spi_stm32_complete(struct device *dev, SPI_TypeDef *spi,
 			       int status)
 {
 
@@ -221,7 +221,7 @@ static void spi_stm32_complete(struct spi_stm32_data *data, SPI_TypeDef *spi,
 
 #if defined(CONFIG_SPI_STM32_DMA)
 
-	struct device *dev = CONTAINER_OF(data, struct device, driver_data);
+	struct spi_stm32_data *data = dev->driver_data;
 	const struct spi_stm32_config *cfg = dev->config->config_info;
 
 	LL_SPI_DisableDMAReq_RX(spi);
@@ -253,7 +253,7 @@ void spi_stm32_dma_callback(void *arg, u32_t channel, int error_code)
 	__ASSERT_NO_MSG(data->nDMA);
 
 	if (!--data->nDMA) {
-		spi_stm32_complete(data, spi, error_code);
+		spi_stm32_complete(dev, spi, error_code);
 	}
 #elif 1
 
@@ -268,7 +268,7 @@ void spi_stm32_dma_callback(void *arg, u32_t channel, int error_code)
 		spi_context_update_rx(&data->ctx, 1, data->ctx.current_rx->len);
 
 		if (!(spi_context_tx_on(&data->ctx)) && !(spi_context_rx_on(&data->ctx))) {
-			spi_stm32_complete(data, spi, error_code);
+			spi_stm32_complete(dev, spi, error_code);
 			return;
 		}
 
@@ -379,7 +379,7 @@ void spi_stm32_dma_callback(void *arg, u32_t channel, int error_code)
 	if (!--data->nDMA) {
 
 		if (!(spi_context_tx_on(&data->ctx)) && !(spi_context_rx_on(&data->ctx))) {
-			spi_stm32_complete(data, spi, error_code);
+			spi_stm32_complete(dev, spi, error_code);
 			return;
 		}
 
@@ -403,7 +403,7 @@ static void spi_stm32_isr(void *arg)
 
 		printk("SPI ERROR OCCURRED - %i\n", err);
 
-		//spi_stm32_complete(data, spi, err);
+		//spi_stm32_complete(dev, spi, err);
 		return;
 	}
 
@@ -422,7 +422,7 @@ static void spi_stm32_isr(void *arg)
 
 	err = spi_stm32_get_err(spi);
 	if (err) {
-		spi_stm32_complete(data, spi, err);
+		spi_stm32_complete(dev, spi, err);
 		return;
 	}
 
@@ -431,7 +431,7 @@ static void spi_stm32_isr(void *arg)
 	}
 
 	if (err || !spi_stm32_transfer_ongoing(data)) {
-		spi_stm32_complete(data, spi, err);
+		spi_stm32_complete(dev, spi, err);
 	}
 }
 #endif
@@ -693,7 +693,7 @@ static int transceive(struct device *dev,
 		ret = spi_stm32_shift_frames(spi, data);
 	} while (!ret && spi_stm32_transfer_ongoing(data));
 
-	spi_stm32_complete(data, spi, ret);
+	spi_stm32_complete(dev, spi, ret);
 
 #ifdef CONFIG_SPI_SLAVE
 	if (spi_context_is_slave(&data->ctx) && !ret) {
