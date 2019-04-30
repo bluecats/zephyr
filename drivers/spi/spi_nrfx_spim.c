@@ -1,11 +1,14 @@
 /*
  * Copyright (c) 2017 - 2018, Nordic Semiconductor ASA
+ * Copyright (c) 2019, Vincent van der Locht
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <spi.h>
 #include <nrfx_spim.h>
+#include <nrfx_gpiote.h>
+#include <nrfx_ppi.h>
 #include <string.h>
 
 #define LOG_DOMAIN "spi_nrfx_spim"
@@ -27,6 +30,11 @@ struct spi_nrfx_data {
 struct spi_nrfx_config {
 	nrfx_spim_t spim;
 	size_t      max_chunk_len;
+#ifdef CONFIG_SOC_NRF52832
+	uint8_t sck_pin;
+	uint8_t ppi_channel;
+	uint8_t gpiote_channel;
+#endif
 };
 
 static inline struct spi_nrfx_data *get_dev_data(struct device *dev)
@@ -183,8 +191,22 @@ static void transfer_next_chunk(struct device *dev)
 		   SOC_NRF52832_ALLOW_SPIM_DESPITE_PAN_58 is enabled */
 		if (IS_ENABLED(CONFIG_SOC_NRF52832) &&
 		   (xfer.rx_length == 1 && xfer.tx_length <= 1)) {
-			LOG_WRN("Transaction aborted since it would trigger nRF52832 PAN 58");
-			error = -EIO;
+			//LOG_WRN("Transaction aborted since it would trigger nRF52832 PAN 58");
+			//error = -EIO;
+
+			// Create an event when SCK toggles.
+			nrf_gpiote_event_configure(dev_config->gpiote_channel, dev_config->sck_pin, NRF_GPIOTE_POLARITY_TOGGLE);
+
+			// Stop the spim instance when SCK toggles.
+			nrf_ppi_channel_endpoint_setup(dev_config->ppi_channel,
+											(uint32_t)&NRF_GPIOTE->EVENTS_IN[dev_config->gpiote_channel],
+											(uint32_t)&dev_config->spim.p_reg->TASKS_STOP);
+			nrf_ppi_channel_enable(dev_config->ppi_channel);
+			
+			// The spim instance cannot be stopped mid-byte, so it will finish
+			// transmitting the first byte and then stop. Effectively ensuring
+			// that only 1 byte is transmitted.
+
 		}
 
 		if (!error) {
@@ -286,6 +308,18 @@ static void event_handler(const nrfx_spim_evt_t *p_event, void *p_context)
 		spi_context_update_tx(&dev_data->ctx, 1, dev_data->chunk_len);
 		spi_context_update_rx(&dev_data->ctx, 1, dev_data->chunk_len);
 
+		if (IS_ENABLED(CONFIG_SOC_NRF52832)) 
+		{
+			const struct spi_nrfx_config *dev_config = get_dev_config(dev);
+			
+			// The spim instance cannot be stopped mid-byte, so it will finish
+			// transmitting the first byte and then stop. Effectively ensuring
+			// that only 1 byte is transmitted.
+			nrf_gpiote_event_disable(dev_config->gpiote_channel);
+			nrf_ppi_channel_disable(dev_config->ppi_channel);
+
+		}
+
 		transfer_next_chunk(dev);
 	}
 }
@@ -344,6 +378,11 @@ static int init_spim(struct device *dev, const nrfx_spim_config_t *config)
 	static const struct spi_nrfx_config spi_##idx##z_config = {	       \
 		.spim = NRFX_SPIM_INSTANCE(idx),			       \
 		.max_chunk_len = (1 << SPIM##idx##_EASYDMA_MAXCNT_SIZE) - 1,   \
+#ifdef CONFIG_SOC_NRF52832
+	.sck_pin   = DT_NORDIC_NRF_SPI_SPI_##idx##_SCK_PIN,    \
+	.ppi_channel   = CONFIG_SPI_##idx##_PPI_CHANNEL,    \
+	.gpiote_channel   = CONFIG_SPI_##idx##_GPIOTE_CHANNEL,    \
+#endif
 	};								       \
 	DEVICE_AND_API_INIT(spi_##idx,					       \
 			    DT_NORDIC_NRF_SPI_SPI_##idx##_LABEL,	       \
