@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2016 BayLibre, SAS
  * DMA Additions (c) Dave Marples <dave@marples.net>
+ * DMA Fixes and rework (c) Vincent van der Locht <vincent@bluecats.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
