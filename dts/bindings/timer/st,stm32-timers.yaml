@@ -22,6 +22,12 @@ properties:
       constraint: "st,stm32-timers"
       generation: define
 
+    interrupts:
+      category: required
+      type: array
+      description: required interrupts
+      generation: define
+
     label:
       type: string
       category: required

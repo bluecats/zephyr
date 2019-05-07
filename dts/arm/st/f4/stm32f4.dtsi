@@ -244,6 +244,7 @@
 			clocks = <&rcc STM32_CLOCK_BUS_APB1 0x00000001>;
 			status = "disabled";
 			label = "TIMERS_2";
+			interrupts = <28 0>;
 
 			pwm {
 				compatible = "st,stm32-pwm";
@@ -292,6 +293,7 @@
 			clocks = <&rcc STM32_CLOCK_BUS_APB1 0x00000008>;
 			status = "disabled";
 			label = "TIMERS_5";
+			interrupts = <50 0>;
 
 			pwm {
 				compatible = "st,stm32-pwm";
