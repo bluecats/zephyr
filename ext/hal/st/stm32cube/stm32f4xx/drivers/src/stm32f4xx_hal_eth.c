@@ -308,7 +308,7 @@ HAL_StatusTypeDef HAL_ETH_Init(ETH_HandleTypeDef *heth)
   heth->State = HAL_ETH_STATE_READY;
 
   /* Return function status */
-  return HAL_TIMEOUT; //res;
+  return HAL_OK; //res;
 
 }
 
