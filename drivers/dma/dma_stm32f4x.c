@@ -237,10 +237,9 @@ static void dma_stm32_irq_handler(void *arg, u32_t id)
 	config = dma_stm32_read(ddata, DMA_STM32_SCR(id));
 	sfcr = dma_stm32_read(ddata, DMA_STM32_SFCR(id));
 
-
-
 	/* Silently ignore spurious transfer half complete IRQ */
-	if (irqstatus & DMA_STM32_HTI) {
+	if (irqstatus & DMA_STM32_HTI && !(irqstatus & DMA_STM32_TCI) && !(irqstatus & DMA_STM32_TEI)) {
+		printk("SPURIOUS IRQ ON DMA: 0x%08x, 0x%08x, 0x%08x\n", irqstatus, config, sfcr);
 		dma_stm32_irq_clear(ddata, id, DMA_STM32_HTI);
 		return;
 	}
