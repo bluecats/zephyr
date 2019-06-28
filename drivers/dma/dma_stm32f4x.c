@@ -211,13 +211,13 @@ static u32_t dma_stm32_irq_status(struct dma_stm32_device *ddata,
 		irqs = dma_stm32_read(ddata, DMA_STM32_LISR);
 	}
 
-	return (irqs >> (((id & 2) << 3) | ((id & 1) * 6U)));
+	return (irqs >> (((id & 2) << 3) | ((id & 1) * 6U))) & 0x3D;
 }
 
 static void dma_stm32_irq_clear(struct dma_stm32_device *ddata,
 				u32_t id, u32_t irqs)
 {
-	irqs = irqs << (((id & 2) << 3) | ((id & 1) * 6U));
+	irqs = (irqs & 0x3D) << (((id & 2) << 3) | ((id & 1) * 6U));
 
 	if (id & 4) {
 		dma_stm32_write(ddata, DMA_STM32_HIFCR, irqs);
