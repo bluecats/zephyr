@@ -68,3 +68,24 @@ config COUNTER_RTC_STM32_LSE_DRIVE_STRENGTH
 	default 0x00000018 if COUNTER_RTC_STM32_LSE_DRIVE_HIGH
 
 endif
+
+
+menuconfig COUNTER_TIM_STM32
+	bool "STM32 Counter TIM driver"
+	depends on SOC_FAMILY_STM32
+	select USE_STM32_LL_TIM
+	select USE_STM32_LL_PWR
+	select USE_STM32_LL_RCC
+	select USE_STM32_LL_EXTI
+	select NEWLIB_LIBC
+	help
+	  Build TIM driver for STM32 SoCs. Tested on STM32 F4 series (more to be added...)
+
+config COUNTER_TIM_STM32_TIMER0
+	bool "Enable Counter on TIM5"
+	depends on COUNTER_TIM_STM32
+
+config COUNTER_TIM_STM32_TIMER1
+	bool "Enable Counter on TIM2"
+	depends on COUNTER_TIM_STM32
+
