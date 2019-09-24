@@ -320,7 +320,7 @@ static const struct counter_driver_api tim_stm32_driver_api = {
 			data->ch_data[i].callback = NULL; \
 		if(clk) \
 			clock_control_on(clk, (clock_control_subsys_t *) &cfg->pclken); \
-		cfg->ll_tim_config.Prescaler = __LL_TIM_CALC_PSC(SystemCoreClock, 1000000); \
+		cfg->ll_tim_config.Prescaler = __LL_TIM_CALC_PSC(SystemCoreClock, 2000000); \
 		cfg->ll_tim_config.CounterMode = LL_TIM_COUNTERMODE_UP; \
 		cfg->ll_tim_config.Autoreload = UINT32_MAX; \
 		cfg->ll_tim_config.ClockDivision = LL_TIM_CLOCKDIVISION_DIV1; \
