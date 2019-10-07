@@ -65,6 +65,12 @@
 #include <stm32f4xx_ll_pwr.h>
 #endif
 
+#if defined(CONFIG_COUNTER_TIM_STM32)
+#include <stm32f4xx_ll_tim.h>
+#include <stm32f4xx_ll_exti.h>
+#include <stm32f4xx_ll_pwr.h>
+#endif
+
 #ifdef CONFIG_GPIO_STM32
 #include <stm32f4xx_ll_gpio.h>
 #endif

@@ -1,0 +1,18 @@
+---
+title: STM32 COUNTER
+version: 0.1
+
+description: >
+    This binding gives a base representation of the STM32 COUNTER
+
+properties:
+    compatible:
+      constraint: "st,stm32-counter"
+
+    label:
+      type: string
+      category: required
+      description: Human readable string describing the device (used by Zephyr for API name)
+      generation: define
+
+...

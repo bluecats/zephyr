@@ -33,6 +33,8 @@ source "drivers/counter/Kconfig.imx_epit"
 
 source "drivers/counter/Kconfig.stm32_rtc"
 
+source "drivers/counter/Kconfig.stm32_tim"
+
 source "drivers/counter/Kconfig.sam0"
 
 source "drivers/counter/Kconfig.cmos"
