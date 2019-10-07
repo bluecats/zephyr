@@ -63,6 +63,7 @@ arduino_serial: &usart6 {};
 
 &spi1 {
 	status = "okay";
+	cs-gpios = <&gpioa 4 0>;
 };
 
 &usart3 {
