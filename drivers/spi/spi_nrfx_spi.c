@@ -208,7 +208,7 @@ static int spi_nrfx_transceive_async(struct device *dev,
 				     const struct spi_config *spi_cfg,
 				     const struct spi_buf_set *tx_bufs,
 				     const struct spi_buf_set *rx_bufs,
-				     struct k_poll_signal *async)
+				     struct spi_async_event *async)
 {
 	spi_context_lock(&get_dev_data(dev)->ctx, true, async);
 	return transceive(dev, spi_cfg, tx_bufs, rx_bufs);
@@ -255,13 +255,13 @@ static void event_handler(const nrfx_spi_evt_t *p_event, void *p_context)
 	}
 }
 
-static int init_spi(struct device *dev)
+static int init_spi(struct device *dev, const nrfx_spi_config_t *config)
 {
 	/* This sets only default values of frequency, mode and bit order.
 	 * The proper ones are set in configure() when a transfer is started.
 	 */
 	nrfx_err_t result = nrfx_spi_init(&get_dev_config(dev)->spi,
-					  &get_dev_config(dev)->config,
+					  config,
 					  event_handler,
 					  dev);
 	if (result != NRFX_SUCCESS) {

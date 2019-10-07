@@ -187,8 +187,22 @@ static void transfer_next_chunk(struct device *dev)
 		   SOC_NRF52832_ALLOW_SPIM_DESPITE_PAN_58 is enabled */
 		if (IS_ENABLED(CONFIG_SOC_NRF52832) &&
 		   (xfer.rx_length == 1 && xfer.tx_length <= 1)) {
-			LOG_WRN("Transaction aborted since it would trigger nRF52832 PAN 58");
-			error = -EIO;
+			//LOG_WRN("Transaction aborted since it would trigger nRF52832 PAN 58");
+			//error = -EIO;
+
+			// Create an event when SCK toggles.
+			nrf_gpiote_event_configure(dev_config->gpiote_channel, dev_config->sck_pin, NRF_GPIOTE_POLARITY_TOGGLE);
+
+			// Stop the spim instance when SCK toggles.
+			nrf_ppi_channel_endpoint_setup(dev_config->ppi_channel,
+											(uint32_t)&NRF_GPIOTE->EVENTS_IN[dev_config->gpiote_channel],
+											(uint32_t)&dev_config->spim.p_reg->TASKS_STOP);
+			nrf_ppi_channel_enable(dev_config->ppi_channel);
+			
+			// The spim instance cannot be stopped mid-byte, so it will finish
+			// transmitting the first byte and then stop. Effectively ensuring
+			// that only 1 byte is transmitted.
+
 		}
 
 		if (!error) {
@@ -247,7 +261,7 @@ static int spi_nrfx_transceive_async(struct device *dev,
 				     const struct spi_config *spi_cfg,
 				     const struct spi_buf_set *tx_bufs,
 				     const struct spi_buf_set *rx_bufs,
-				     struct k_poll_signal *async)
+				     struct spi_async_event *async)
 {
 	spi_context_lock(&get_dev_data(dev)->ctx, true, async);
 	return transceive(dev, spi_cfg, tx_bufs, rx_bufs);
@@ -289,6 +303,18 @@ static void event_handler(const nrfx_spim_evt_t *p_event, void *p_context)
 	if (p_event->type == NRFX_SPIM_EVENT_DONE) {
 		spi_context_update_tx(&dev_data->ctx, 1, dev_data->chunk_len);
 		spi_context_update_rx(&dev_data->ctx, 1, dev_data->chunk_len);
+
+		if (IS_ENABLED(CONFIG_SOC_NRF52832)) 
+		{
+			const struct spi_nrfx_config *dev_config = get_dev_config(dev);
+			
+			// The spim instance cannot be stopped mid-byte, so it will finish
+			// transmitting the first byte and then stop. Effectively ensuring
+			// that only 1 byte is transmitted.
+			nrf_gpiote_event_disable(dev_config->gpiote_channel);
+			nrf_ppi_channel_disable(dev_config->ppi_channel);
+
+		}
 
 		transfer_next_chunk(dev);
 	}
@@ -388,6 +414,10 @@ static int spim_nrfx_pm_control(struct device *dev, u32_t ctrl_command,
 			.mosi_pin  = DT_NORDIC_NRF_SPI_SPI_##idx##_MOSI_PIN,   \
 			.miso_pin  = DT_NORDIC_NRF_SPI_SPI_##idx##_MISO_PIN,   \
 			.ss_pin    = NRFX_SPIM_PIN_NOT_USED,		       \
+#ifdef CONFIG_SOC_NRF52832
+			.ppi_channel   = CONFIG_SPI_##idx##_PPI_CHANNEL,    \
+			.gpiote_channel   = CONFIG_SPI_##idx##_GPIOTE_CHANNEL,    \
+#endif
 			.orc       = CONFIG_SPI_##idx##_NRF_ORC,	       \
 			.frequency = NRF_SPIM_FREQ_4M,			       \
 			.mode      = NRF_SPIM_MODE_0,			       \
