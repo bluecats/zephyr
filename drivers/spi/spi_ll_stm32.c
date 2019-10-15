@@ -687,8 +687,8 @@ static int transceive(struct device *dev,
 		data->armed = true;
 	}
 
-	/* This is turned off in spi_stm32_complete(). */
-	spi_context_cs_control(&data->ctx, true);
+	/* Now just wait for it to complete, or an error */
+	ret = spi_context_wait_for_completion(&data->ctx);
 
 #elif defined(CONFIG_SPI_STM32_INTERRUPT)
 
@@ -770,6 +770,7 @@ static const struct spi_driver_api api_funcs = {
 	.transceive_async = spi_stm32_transceive_async,
 #endif
 	.release = spi_stm32_release,
+	.trigger = spi_stm32_trigger
 };
 
 static int spi_stm32_init(struct device *dev)
