@@ -255,13 +255,13 @@ static void event_handler(const nrfx_spi_evt_t *p_event, void *p_context)
 	}
 }
 
-static int init_spi(struct device *dev, const nrfx_spi_config_t *config)
+static int init_spi(struct device *dev)
 {
 	/* This sets only default values of frequency, mode and bit order.
 	 * The proper ones are set in configure() when a transfer is started.
 	 */
 	nrfx_err_t result = nrfx_spi_init(&get_dev_config(dev)->spi,
-					  config,
+					  &get_dev_config(dev)->config,
 					  event_handler,
 					  dev);
 	if (result != NRFX_SUCCESS) {
