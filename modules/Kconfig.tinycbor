@@ -58,4 +58,12 @@ config CBOR_PRETTY_PRINTING
 	help
 	  This option enables cbor_value_to_pretty_stream function.
 
+config APP_LINK_WITH_TINYCBOR
+	bool "Link 'app' with TINYCBOR"
+	default y
+	help
+	  Add TINYCBOR header files to the 'app' include path. It may be
+	  disabled if the include paths for FS are causing aliasing
+	  issues for 'app'.
+
 endif #TINYCBOR
