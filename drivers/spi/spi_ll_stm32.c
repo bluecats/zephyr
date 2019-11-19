@@ -415,7 +415,7 @@ static void spi_stm32_isr(void *arg)
 {
 	struct device * const dev = (struct device *) arg;
 	const struct spi_stm32_config *cfg = dev->config->config_info;
-	struct spi_stm32_data *data = dev->driver_data;
+	//struct spi_stm32_data *data = dev->driver_data;
 	SPI_TypeDef *spi = cfg->spi;
 	int err;
 
