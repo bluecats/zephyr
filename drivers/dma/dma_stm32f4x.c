@@ -246,7 +246,9 @@ static void dma_stm32_irq_handler(void *arg, u32_t id)
 		return;
 	}
 
-	stream->busy = false;
+	/*Leave stream active to prevent excessive reconfiguraiton for shared streams
+	  Note this prioritizes chained transactions over round robin sharing */
+	//stream->busy = false;
 
 	if ((irqstatus & DMA_STM32_TCI) && (config & DMA_STM32_SCR_TCIE)) {
 		dma_stm32_irq_clear(ddata, id, DMA_STM32_TCI);

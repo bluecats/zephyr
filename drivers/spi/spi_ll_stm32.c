@@ -297,9 +297,21 @@ void spi_stm32_dma_callback(void *arg, u32_t channel, int error_code)
 			data->b[RX_STREAM].dest_address = (u32_t)data->ctx.rx_buf;
 			data->b[RX_STREAM].block_size = data->ctx.rx_len;
 			data->nDMA++;
+			
+#if (defined(CONFIG_SPI_STM32_DMA) && defined(CONFIG_SPI_5) && defined(CONFIG_SPI_6))
+			if(cfg->spi == DT_SPI_5_BASE_ADDRESS) {
+				ret = dma_config(data->d, cfg->stream[RX_STREAM],
+						&data->dma_conf[RX_STREAM]);
+			}
+			else {
+				ret = dma_reload(data->d, cfg->stream[RX_STREAM], data->b[RX_STREAM].source_address,
+						data->b[RX_STREAM].dest_address, data->b[RX_STREAM].block_size);
+			}
+#else
+			ret = dma_reload(data->d, cfg->stream[RX_STREAM], data->b[RX_STREAM].source_address,
+					data->b[RX_STREAM].dest_address, data->b[RX_STREAM].block_size);
+#endif
 
-			ret = dma_config(data->d, cfg->stream[RX_STREAM],
-					&data->dma_conf[RX_STREAM]);
 			if (ret) {
 				LOG_ERR("Failed to configure RX_STREAM");
 				return;
@@ -318,8 +330,20 @@ void spi_stm32_dma_callback(void *arg, u32_t channel, int error_code)
 			data->b[TX_STREAM].block_size = data->ctx.tx_len;
 			data->nDMA++;
 
-			ret = dma_config(data->d, cfg->stream[TX_STREAM],
+#if (defined(CONFIG_SPI_STM32_DMA) && defined(CONFIG_SPI_5) && defined(CONFIG_SPI_6))
+			if(cfg->spi == DT_SPI_6_BASE_ADDRESS) {
+				ret = dma_config(data->d, cfg->stream[TX_STREAM],
 						&data->dma_conf[TX_STREAM]);
+			}
+			else {
+				ret = dma_reload(data->d, cfg->stream[TX_STREAM], data->b[TX_STREAM].source_address,
+						data->b[TX_STREAM].dest_address, data->b[TX_STREAM].block_size);
+			}
+#else
+			ret = dma_reload(data->d, cfg->stream[TX_STREAM], data->b[TX_STREAM].source_address,
+					data->b[TX_STREAM].dest_address, data->b[TX_STREAM].block_size);
+#endif
+
 			if (ret) {
 				LOG_ERR("Failed to configure TX_STREAM");
 				return;
@@ -564,6 +588,11 @@ static int spi_stm32_configure(struct device *dev,
 
 	spi_context_cs_configure(&data->ctx);
 
+	dma_config(data->d, cfg->stream[RX_STREAM],
+						&data->dma_conf[RX_STREAM]);
+	dma_config(data->d, cfg->stream[TX_STREAM],
+						&data->dma_conf[TX_STREAM]);
+
 	LOG_DBG("Installed config %p: freq %uHz (div = %u),"
 		    " mode %u/%u/%u, slave %u",
 		    config, clock >> br, 1 << br,
@@ -637,9 +666,19 @@ static int transceive(struct device *dev,
 		data->nDMA++;
 
 		//printk("RX ");
-
-		ret = dma_config(data->d, cfg->stream[RX_STREAM],
-				&data->dma_conf[RX_STREAM]);
+#if (defined(CONFIG_SPI_STM32_DMA) && defined(CONFIG_SPI_5) && defined(CONFIG_SPI_6))
+		if(cfg->spi == DT_SPI_5_BASE_ADDRESS) {
+			ret = dma_config(data->d, cfg->stream[RX_STREAM],
+					&data->dma_conf[RX_STREAM]);
+		}
+		else {
+			ret = dma_reload(data->d, cfg->stream[RX_STREAM], data->b[RX_STREAM].source_address,
+					data->b[RX_STREAM].dest_address, data->b[RX_STREAM].block_size);
+		}
+#else
+		ret = dma_reload(data->d, cfg->stream[RX_STREAM], data->b[RX_STREAM].source_address,
+					data->b[RX_STREAM].dest_address, data->b[RX_STREAM].block_size);
+#endif
 		if (ret) {
 			LOG_ERR("Failed to configure RX_STREAM");
 			spi_context_cs_control(&data->ctx, false);
@@ -658,8 +697,20 @@ static int transceive(struct device *dev,
 
 		//printk("TX ");
 
-		ret = dma_config(data->d, cfg->stream[TX_STREAM],
+#if (defined(CONFIG_SPI_STM32_DMA) && defined(CONFIG_SPI_5) && defined(CONFIG_SPI_6))
+		if(cfg->spi == DT_SPI_6_BASE_ADDRESS) {
+			ret = dma_config(data->d, cfg->stream[TX_STREAM],
 					&data->dma_conf[TX_STREAM]);
+		}
+		else {
+			ret = dma_reload(data->d, cfg->stream[TX_STREAM], data->b[TX_STREAM].source_address,
+					data->b[TX_STREAM].dest_address, data->b[TX_STREAM].block_size);
+		}
+#else
+		ret = dma_reload(data->d, cfg->stream[TX_STREAM], data->b[TX_STREAM].source_address,
+				data->b[TX_STREAM].dest_address, data->b[TX_STREAM].block_size);
+#endif
+		
 		if (ret) {
 			LOG_ERR("Failed to configure TX_STREAM");
 			spi_context_cs_control(&data->ctx, false);
@@ -1136,7 +1187,7 @@ static const  struct spi_stm32_config spi_stm32_cfg_5 = {
 #endif
 
 #ifdef CONFIG_SPI_STM32_DMA
-	.stream[TX_STREAM] = 6,
+	.stream[TX_STREAM] = 4,
 	.stream[RX_STREAM] = 5,
 	.dmadev = CONFIG_DMA_2_NAME,
 #endif
